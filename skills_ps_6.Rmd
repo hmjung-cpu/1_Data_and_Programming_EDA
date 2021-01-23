@@ -1,0 +1,499 @@
+---
+title: "30535 Skills Problem Set 6"
+author: "Hye-Min Jung"
+date: "6/3/2020"
+output: html_document
+---
+This submission is my work alone and complies with the 30535 integrity policy. **Hye-Min Jung**  
+Collaborators:  
+Late coins used this pset: 3. Late coins left: 3. 
+
+I followed the style guide including the new points on styling joins.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(R.cache)
+library(styler)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(nycflights13)
+library(lubridate)
+```
+
+# 1 R4DS Chapter 13 Joins part 2  
+
+1. Use facets to plot the spatial patterns of delays on "June 13 2013" along with a comparison plot of “normal” delays and then use Google to cross-reference with the weather. (Use the “question, query, result, answer” framework to answer this question. In addition to your written answer, make the plot title be a succinct answer.)
+
+> Question : What happened on June 13 2013?
+
+> Query
+
+```{r}
+library(viridis)
+
+not_cancelled <- flights %>%
+  filter(!is.na(dep_time), !is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay)) %>%
+  filter(dest != "HNL", dest != "ANC")
+```
+
+
+> Result
+
+```{r}
+not_cancelled %>%
+  mutate(
+    date = substr(time_hour, 1, 10),
+    comparison = ifelse(date == "2013-06-13", "June 13 2013", "normal days in 2013")
+  ) %>%
+  group_by(dest, comparison) %>%
+  summarise(delay = mean(arr_delay, na.rm = TRUE)) %>%
+  inner_join(airports, by = c("dest" = "faa")) %>%
+  ggplot(aes(x = lon, y = lat, size = delay, colour = delay)) +
+  borders("state") +
+  geom_point() +
+  coord_quickmap() +
+  scale_color_viridis() +
+  labs(title = "Headline: Severe derechos and longer arrival delays in 06/13/2013", x = "Longitude", y = "Latitude") +
+  facet_wrap(~comparison)
+```
+
+
+> Answer
+
+* **Head_meassage**
+  + Severe derechos and longer arrival delays in 06/13/2013.
+
+* **Sub-messages**
+  + 1. Due to 2 derechos occurred across different areas of the Eastern United States from 06/12~13 in 2013,
+delays were significantly longer in 06/13 than normal other days in 2013.
+  + 2. Delays were more severe in east coast than west coast. This is consistent with path of June 12–13, 2013 Derecho Series that hit Midwest and Mid Atlantic. 
+  + 3. TYS, BUR, BWI were top 3 airports with longest average delays. (Affected the most) 
+  + 4. STT, SLB, GSO were top 3 airports with least average delays. (Affected the least)
+
+  + resource: https://en.wikipedia.org/wiki/June_12–13,_2013_derecho_series
+```{r, include = FALSE}
+not_cancelled %>%
+  mutate(date = substr(time_hour, 1, 10)) %>%
+  filter(date == "2013-06-13") %>%
+  group_by(dest) %>%
+  summarise(ave_arr_delay = mean(arr_delay)) %>%
+  arrange(desc(ave_arr_delay)) %>%
+  arrange(ave_arr_delay)
+```
+
+
+2. 
+
+* **What does anti_join(flights, airports, by = c("dest" = "faa")) tell you?**
+  + Output for running this code returns the flights that went to an airport that is not in the faa list as a destinations. 
+  + Here, we are connecting `flights` and `airplanes` by using`dest` and foreign key `faa` and `anti_join` is used to diagnose mismatches, by checking whether the foreign keys match primary keys.  
+  + So this code, let us know destination don't have a match in `airports`.
+```{r}
+anti_join(flights, airports, by = c("dest" = "faa"))
+
+flights %>%
+  count(dest) %>%
+  filter(n > 1)
+
+airports %>%
+  count(faa) %>%
+  filter(n > 1)
+```
+
+* **What does anti_join(airports, flights, by = c("faa" = "dest")) tell you?**
+  + Output for running this code returns the US airports that were not the destinations of any flight from New York City airports in 2013.
+
+```{r}
+anti_join(airports, flights, by = c("faa" = "dest"))
+```
+
+
+# 2 R4DS Chapter 14 stringr
+
+
+1. **Use str_length() and str_sub() to extract the middle character (or characters for even lengthed words) from a string.**
+```{r}
+x <- c("Apple", "Banana", "Pear")
+str_length(x)
+str_sub(string = x, start = (str_length(x) + 1) / 2, end = (str_length(x) + 2) / 2)
+```
+
+
+2. **Write a regular expression to match “Gan<any char><any char><any char>” where “<any char>” can include any character or no character at all. Prove your regular expression works with three examples.**
+```{r}
+y <- c("Gan", "Gana", "Gandalfhello")
+str_view(y, "Gan\\w*")
+```
+
+3. Given the corpus of common words in stringr::words, create regular expressions that find all words that:
+
+* **1. Ends with “y”.**
+```{r}
+sum(str_detect(words, "y$"))
+```
+* **2. Starts with “q”**
+```{r}
+sum(str_detect(words, "^q"))
+```
+* **3. Are exactly four letters long. (Don’t use str_length()!)**
+```{r}
+sum(str_detect(words, "^....$"))
+```
+* **4. Are 8 letters or longer.**
+```{r}
+sum(str_detect(words, "........"))
+```
+
+4. Create regular expressions to find all words in stringr::words that meet the following criteria. In addition, please provide two test cases where your regular expression returns a match and two test cases that do not return a match.
+
+* **1. Start with a vowel.**
+```{r}
+# regular expression returns a match
+sum(str_detect(words, "^[aeiou]"))
+
+## str_subset(words, "^[aeiou]") I did not run the code but it gave the same answer
+
+# two test cases that do not return a match
+sum(str_detect(words, "[aeiou]$"))
+
+sum(str_detect(words, "[aeiou]"))
+```
+
+* **2. That only contain consonants. (Hint: thinking about matching “not”-vowels.)**
+```{r}
+# regular expression returns a match
+sum(str_detect(words, "^[^aeiou]+$"))
+
+## str_subset(stringr::words, "^[^aeiou]+$") I did not run the code but it gave the same answer
+
+# two test cases that do not return a match
+sum(str_detect(words, "^[^aeiou]$"))
+
+sum(str_detect(words, "[^aeiou]$"))
+```
+
+* **3. End with ed, but not with eed.**
+```{r}
+# regular expression returns a match
+sum(str_detect(words, pattern = "[^e]ed$"))
+
+## str_subset(stringr::words, "[^e]ed$") I did not run the code but it gave the same answer
+
+# two test cases that do not return a match
+sum(str_detect(words, pattern = "[^e]ed"))
+
+sum(str_detect(words, pattern = "[e]ed$"))
+```
+
+* **4. End with ing or ise.**
+```{r}
+# regular expression returns a match
+sum(str_detect(words, pattern = "ing$|ise$"))
+
+## str_subset(stringr::words, "i(ng|se)$") I did not run the code but it gave the same answer
+
+# two test cases that do not return a match
+sum(str_detect(words, pattern = "ing|ise$"))
+
+sum(str_detect(words, pattern = "ing|ise"))
+```
+
+5. Show how telephone numbers are written in your country with three examples. 
+* **Create a regular expression that will match telephone numbers as commonly written in your country.**
+```{r}
+z <- c("010-2345-3535", "01023453535", "010.2345.3535")
+str_view(z, "\\d\\d\\d-\\d\\d\\d\\d-\\d\\d\\d\\d")
+```
+
+6. **Split up the string "apples, pears, and bananas" into individual components.** 
+```{r}
+y <- c("apples, pears, and bananas")
+
+str_split(y, " ")
+```
+
+# 3 R4DS Chapter 15 for_cats
+
+1. forcats::gss_cat includes data from the General Social Survey. 
+
+* **Explore the distribution of rincome (reported income).** 
+```{r}
+gss_cat %>%
+  count(rincome) %>%
+  mutate(share = round(n / sum(n), 2))
+```
+
+* **Make a bar chart with the distribution of rincome.**
+
+```{R}
+ggplot(gss_cat, aes(rincome)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "3.1 Distribution of reported income")
+```
+
+
+* **What makes the default barchart hard to understand? Improve the chart.**
+  + Default barchart has x-axis labeling overwrapping each other, because the texts are quite long.
+  + I would `coord_flip()` to make it horizontal.
+
+```{R}
+ggplot(gss_cat, aes(rincome)) +
+  geom_bar() +
+  scale_x_discrete(drop = FALSE) +
+  labs(title = "3.1 Distribution of reported income (improved chart)") +
+  coord_flip()
+```
+
+2. Use a forcats command to collapse rincome into a small set of meaningful categories and remake the bar chart from above.
+
+```{r}
+rincome_summary <- gss_cat %>%
+  group_by(rincome) %>%
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(rincome_summary, aes(age, fct_reorder(rincome, age))) +
+  geom_point() +
+  labs(title = "3.2 Average age by income")
+```
+
+3. There are some suspiciously high numbers in tvhours.
+
+a. Make a plot to examine the variable’s distribution. 
+
+* **What number do you consider to be unreasonably high?**
+  + 24 is unreasonably high, considering that the tvhours are hours 'per day watching tv'.
+```{r}
+boxplot(gss_cat$tvhours, main = "3.3 Hours per day watching tv")
+max(gss_cat$tvhours, na.rm = TRUE)
+```
+
+
+b. Review the three options for handling outliers from lecture 3. 
+
+* **What is your preferred option and why?**
+  + I would like to winsorize, because I don't know whether data is correct. 
+  + If I know that the data is incorrect, I could re-code outliers to NAs or just drop them.
+  + But, because I don't want outliers to drive all the results, without knowing how they were collected nor I can talk to the data provider, I would rather choose to winsorize them.
+
+* **Implement this in your code and remake the “how much TV do people watch by religion?” plot from lecture using the revised data.**
+```{r}
+library(statar)
+gss_cat_clean <-
+  gss_cat %>%
+  mutate(tvhour_winsor = winsorize(tvhours, probs = c(0.01, 0.99)))
+
+relig_summary_reorder <-
+  gss_cat_clean %>%
+  group_by(relig) %>%
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhour_winsor, na.rm = TRUE),
+    n = n(),
+    se = sd(tvhour_winsor, na.rm = TRUE) / sqrt(n),
+    lower_bound = tvhours - 1.645 * se,
+    upper_bound = tvhours + 1.645 * se
+  )
+
+ggplot(relig_summary_reorder, aes(tvhours, fct_reorder(relig, tvhours))) +
+  geom_point() +
+  labs(title = "3.3.b Average hours of watching TV by religion per day")
+```  
+
+c. Add 90 percent confidence intervals using geom_linerange(). Calculate standard errors $\frac{\hat{\sigma}}{\sqrt{n}}$ where
+$\hat{\sigma}$ is the standard deviation for each group and n is the number of observation within a group. Comment on how this changes your understanding of the plot.
+
+```{r}
+ggplot(relig_summary_reorder) +
+  geom_point(aes(x = relig, y = tvhours)) +
+  labs(title = "3.3.c Average hours of watching TV by religion per day (with 90% C.I)") +
+  geom_linerange(aes(x = relig, y = tvhours, ymin = lower_bound, ymax = upper_bound)) +
+  scale_x_discrete(drop = FALSE) +
+  coord_flip()
+```
+
+
+4. **Why does moving “Not applicable” to the front of the levels move it to the bottom of the plot?**
+  + That gives the level “Not applicable” an integer value of 1.
+  + So when you pulling "Not applicable" to the front with th other special levels, it takes a factor, `f`, and then any number of levels that you want to move to the front of the line. 
+
+# 4 R4DS Chapter 16: lubridate
+
+1. PS1 revisited: Compare dep_time, sched_dep_time and dep_delay. It should be the case that dep_time - sched_dep_time = dep_delay.  
+
+* **Does this hold? Be sure to use the new material you learned in this chapter.**
+  + Mostly hold (326,858 delayed flights but not for 324 delayed flights).  
+  + `dep_time - sched_dep_time = dep_delay` holds for 326,858 delayed cases that did not resulted in date change.
+  + But for 324 delayed cases which had date change, this equation did not hold. 
+
+```{r}
+not_cancelled <- flights %>%
+  filter(!is.na(dep_time), !is.na(arr_time))
+
+(all_delayed_cases <-
+  not_cancelled %>%
+  mutate(
+    dep_time_new = sub("(\\d+)(\\d{2})", "\\1:\\2", dep_time),
+    sched_dep_time_new = sub("(\\d+)(\\d{2})", "\\1:\\2", sched_dep_time),
+    subtract = strptime(dep_time_new, format = "%H:%M") - strptime(sched_dep_time_new, format = "%H:%M"),
+    dep_delay_in_sec = dep_delay * 60,
+    dep_delay_new = as.duration(dep_delay_in_sec),
+    diff = dep_delay_new - subtract
+  ) %>%
+  select(dep_time_new, sched_dep_time_new, dep_delay_new, subtract, diff))
+
+(equation_does_hold <-
+  all_delayed_cases %>%
+  filter(diff == as.duration(0)))
+
+(equation_does_not_hold <-
+  all_delayed_cases %>%
+  filter(diff > as.duration(0)))
+```      
+
++ resource: https://stackoverflow.com/questions/43509559/i-want-to-convert-a-number-to-time-in-r
+
+2. **Use the appropriate lubridate function to parse each of the following dates:**
+
+```{r}
+d1 <- "1213-Apr-03"
+ymd(d1)
+
+d2 <- "06-Jun-2017"
+dmy(d2)
+
+d3 <- "12/29/14" # Dec 29, 2014
+mdy(d3)
+
+d4 <- "November 20, 1909"
+mdy(d4)
+
+d5 <- c("January 2 (2016)", "January 2 (2018)")
+
+mdy(d5)
+```
+
+
+3. **Make a plot with four lines: For each season, show the distribution of flight times within a day.**
+
+```{r}
+not_cancelled <- flights %>%
+  filter(!is.na(dep_time), !is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay)) %>%
+  filter(dest != "HNL", dest != "ANC") %>%
+  mutate(
+    season =
+      ifelse(month %in% c(12, 1, 2), "winter",
+        ifelse(month %in% c(3, 4, 5), "spring",
+          ifelse(month %in% c(6, 7, 8), "summer", "fall")
+        )
+      )
+  ) %>%
+  mutate(
+    flight_time = format(time_hour, "%H:%M:%S"),
+    date = substr(time_hour, 1, 10),
+    weekday = weekdays(as.Date(date))
+  )
+
+spring <- not_cancelled %>%
+  filter(season == "spring") %>%
+  group_by(flight_time) %>%
+  count()
+
+summer <- not_cancelled %>%
+  filter(season == "summer") %>%
+  group_by(flight_time) %>%
+  count()
+
+fall <- not_cancelled %>%
+  filter(season == "fall") %>%
+  group_by(flight_time) %>%
+  count()
+
+winter <- not_cancelled %>%
+  filter(season == "winter") %>%
+  group_by(flight_time) %>%
+  count()
+
+ggplot() +
+  geom_line(data = spring, aes(x = flight_time, y = n), color = "yellow", group = 1) +
+  geom_line(data = summer, aes(x = flight_time, y = n), color = "red", group = 1) +
+  geom_line(data = fall, aes(x = flight_time, y = n), color = "orange", group = 1) +
+  geom_line(data = winter, aes(x = flight_time, y = n), color = "blue", group = 1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "4.3 Flight times by season 2013 (yel=spring, red=summer, org=fall, blu=winter)", x = "Flight time(departing time)", y = "counts")
+```
+
+* **How does the distribution change?**
+  + The number of flights are highest between 6~8am and decrease in the number of flights.
+  + Then the number of flights increase until 16~17 then decrease until the midnight.
+  
+4. 
+* **Which day of the week has the smallest probability of an arrival delay?**
+  + Saturday has smallest probability of an arrival delay.
+  + Probability of an arrival delay is estimated by calculating the mean of arrival delays by weekdays.
+  
+```{r}
+not_cancelled %>%
+  group_by(weekday) %>%
+  summarise(ave_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  arrange(ave_delay)
+```
+
+* **Does this change if we only consider long delays?**
+  + Yes, tuesday is has smallest probabilty of an arrival delay, if we only consider long delays.
+  + I've filtered 0.99 percentile of arrival delay which is higher or equal than 190.
+  + Then the result changed.
+```{r}
+not_cancelled %>% summarise(quantile(arr_delay, probs = 0.99))
+
+not_cancelled %>%
+  filter(arr_delay >= 190) %>%
+  group_by(weekday) %>%
+  summarise(ave_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  arrange(ave_delay)
+```
+
+* **Make a plot using facets to show both plots.**
+```{r}
+not_cancelled %>%
+  mutate(delay_type = ifelse(arr_delay > 190, "long delay", "normal delay")) %>%
+  group_by(weekday, delay_type) %>%
+  summarise(ave_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  ggplot(aes(x = weekday, y = ave_delay, color = delay_type, group = delay_type)) +
+  geom_line() +
+  facet_wrap(~delay_type) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+5. 
+
+* **Create a vector of dates giving the seventh day of every month in 2012.**
+```{r}
+ymd(20111207) + months(1:12)
+```
+
+* **Create a vector of dates giving the fifth day of every month in 2020.**
+```{r}
+ymd(20191205) + months(1:12)
+```
+
+6. **Write a function that given your birthday (as a date), returns how old you are in years.**
+```{r}
+as.duration(today() - ymd(19910305))
+```
+
+7. If your home country is not the US, find the locale object for your home country and print it in your problem set. **Print a date object which includes the day of the week, month, calendar day and year and uses the home country locale.**
+```{r}
+library(readr)
+parse_date("31 DICIEMBRE 2011", "%d %B %Y", locale = locale("es"))
+```
+  + I am Korea, but I've tried same with locale("ko"), it keep gives me error. 
+  + So I pretend, that I am spanish and print a date object.

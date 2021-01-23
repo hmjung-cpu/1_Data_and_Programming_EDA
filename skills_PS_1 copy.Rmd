@@ -1,0 +1,243 @@
+---
+title: "30535 Skills Problem Set 1"
+author: "Hye-Min Jung (github ID: hmjung-cpu)"
+date: "4/10/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+This submission is my work alone and complies with the 30535 integrity policy. **Hye-Min Jung**  
+Collaborators: 4/8, additional O/H(Ari Anisfeld) and other 4 students (8:00~8:30pm)  
+Late coins used this pset: 0. Late coins left: 4. 
+
+#### 1. Setup    
++ ##### 1.1 Installation
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+  
+```{r}
+install.packages(setdiff(c("ggplot2", "Rcpp"), rownames(installed.packages())))
+unavailable <- setdiff(c("ggplot2", "Rcpp"), rownames(installed.packages()))
+install.packages(unavailable)
+```
+
+#### 2. R for Data Science Exercises  
++ ##### 2.1 First steps  
+##### 1. How many rows are in mpg? How many columns? What do the rows represent? How about the columns?  
+####### -- *234 rows represent total observation number, 11 columns represent features of car model*
+```{r}
+data("mpg")
+nrow(mpg);ncol(mpg)
+rownames(mpg);colnames(mpg)
+```
+##### 2. Make a scatterplot of hwy vs cyl.    
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = hwy, y = cyl))
+```
+
+##### 3. What does the drv variable describe? Read the help for ?mpg to find out.  
+####### -- *f = front-wheel drive, r = rear wheel drive, 4 = 4wd*  
+  
+##### 4. What happens if you make a scatterplot of class vs drv? Why is the plot not useful?
+####### -- *The graph only shows the existing combinations of categorical variables "classXdrv". It's not useful because it does not show the density of each combinations. It would be giving more information if drawn on 3-dimensional graph to see the densities for each combination of the categorical variables*
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = class, y = drv))
+```
+  
+  
++ ##### 2.2 Grammar of graphics : Mapping data to aesthetics
+##### 1. Run print(mpg) to see the first 10 rows of the tibble. Describe how the <chr>, <int> and <dbl> variable types map to whether a variable is categorical versus continuous.
+####### -- *Generally it depends on what your data is.*   
+####### -- *Generally speaking, "chr" categorical variable "int" categorical/continuous variable "dbl" continuous variable*
+####### -- *One should be cautious because, year for example is treated as integer but it is actually categorical variable*
+```{r}
+print(mpg)
+```
+
+##### 2. Graph the following two scatter plots. Why are the two graphs different? Which graph is a better representation of the data?
+####### -- *Second graph is better representation of the data and color argument with "as.character(year)" brought difference. Although year is represented as numerical value, year is used more like binary(categorical variable) each data points either belong to 1999 or 2008. So we don't need all the years between 1999 and 2008.*  
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x=hwy, y=cty, color=year))
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = hwy, y = cty, color = as.character(year)))
+```
+
+##### 3. What happens if you map an aesthetic to something other than a variable name, like aes(color = displ < 5)?
+####### -- *Convey more informatoin by mapping an aes(color = displ < 5). Data points that has displ < 5, is filtered by exhibiting blue color. It works as if we are adding third variable onto the plot* 
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x=hwy, y=cty, color = displ < 5))
+```
+
+##### 4. Common bugs: What’s gone wrong with this code? Fix the code so the points are blue.  
+####### --*parentheses is written in the wrong place. Aesthetic should be set by name as an argument of your geom function, like this: #geom_point(mapping = aes(x = displ, y = hwy), color = "blue"*
+```{r}
+ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy, color = "blue"))
+```
+
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy), color = "blue")
+```
+  
+  
++ ##### 2.3 Grammar of graphics : Facets  
+##### 1. Make the following plots. How does facet_grid() decide the layout of the grid?  
+####### --*facet decides the layout of the grid by splitting data either by columns or rows or both.*  
+```{r}
+ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy)) + facet_grid(cols = vars(drv))
+ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy)) + facet_grid(rows = vars(year))
+ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy)) + facet_grid(rows = vars(year), cols = vars(drv))
+```
+  
+##### 2. What happens if you facet on a continuous variable? Provide an example.  
+####### --*Running codes below, with continuous variable displ as facet, R produces error message "Error in   grid_as_facets_list(rows, cols) : object 'displ' not found"*  
+####### --ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy)) + facet_grid(rows = displ)  
+
+##### 3. Reproduce the following graph  
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = class, y = hwy, color = class)) + facet_grid(rows = vars(year))
+```
+
+##### 4. The x axis labels for class on this plot are really hard to read! Can you rotate the labels by 45 degrees so that they don’t overlap one another? This would be a good time to use google. Include “ggplot” in your search to get more relevant answers. Remember to cite any code gathered from the internet.    
+###### -- https://stackoverflow.com/questions/1330989/rotating-and-spacing-axis-labels-in-ggplot2   ###### -- #q + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) 
+```{r}
+q <- ggplot(data = mpg) +
+  geom_point(mapping = aes(x = class, y = hwy, color = class)) + facet_grid(rows = vars(year))
+q + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+  
+##### 5. Reproduce the following graph. Why are so many manufacturers missing?  
+###### -- *The shape palette can deal with a maximum of 6 discrete values because more than 6 becomes difficult to discriminate; you have 15. Consider specifying shapes manually if you must have them. Removed 112 rows containing missing values (geom_point).*  
+```{r}
+ggplot(data = mpg) +
+geom_point(mapping = aes(x = displ, y = hwy, shape = manufacturer)) + facet_grid(rows = vars(year), cols = vars(drv))
+```
+
++ ##### 2.4 Grammar of graphics : geoms  
+##### 1. What geom would you use to draw a line chart? A boxplot? A histogram? An area chart?  
+###### -- *Line geom should be used to draw a line chart, such as geom_smooth()*  
+##### 2. Will these two graphs look different? Why/why not?    
+###### -- *Two graphs looks the same. geom_point() and geom_smooth() uses same data and mappings from ggplot(). So it is unnecessary to respecify the same data and mappings over again since both produce same output* 
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + geom_point() +
+geom_smooth(se=FALSE)
+
+ggplot() +
+geom_point(data = mpg, mapping = aes(x = displ, y = hwy)) + geom_smooth(data = mpg, mapping = aes(x = displ, y = hwy), se=FALSE)
+```
+  
+##### 3. You are investigating the connection between city gas mileage and car characteristics in your role as a policy analyst for a climate change organization. Write code to make this graph.   
+###### -- #ggplot(data = mpg, mapping = aes(x = displ, y = cty)) + geom_point(mapping = aes(color = drv)) + geom_smooth(se=FALSE)  
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = cty)) + 
+  geom_point(mapping = aes(color = drv)) + 
+  geom_smooth(se=FALSE)
+```
+
+##### 4. Your colleague suggests you improve the graph: Are all four changes improvements? Which change made the plot worse and why?
+###### -- *Not all changes were improvements. Adding more information without harming visual aesthetics of the plot made graph look better. But removing legend made impossible to interpret the representations of each color. Improvement was brought by adding title and more informative x, y labels. But removing the legend made plot worse. changing the line color had no benefit/loss.*    
+  
+###### -- https://stackoverflow.com/questions/49358100/colour-black-in-geom-smooth-changes-lm-line-with-r-gglplot2-why/49358566  
+
+###### -- http://environmentalcomputing.net/plotting-with-ggplot-adding-titles-and-axis-names/  
+  
+###### -- https://www.datanovia.com/en/blog/ggplot-legend-title-position-and-labels/  
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = cty)) + 
+  geom_point(mapping = aes(color = drv)) + 
+  geom_smooth(se=FALSE, color = "black") + 
+  labs(title = "Connection between city gas mileage and car characteristics", x = "engine displacement(liters)", y = "city miles per gallon(mpg)") + 
+  theme(legend.position = "none") 
+```
+
++ ##### 2.4.1 grammar of graphics: Statistical transformations 
+##### 1. What does geom_col() do? How is it different from geom_bar()?  
+###### -- *geom_col() makes bar chart by using stat_identity(), leaving the data as is and makes the height of the bar proportional to the number of cases in each group (or if the weight aesthetic is supplied, the sum of the weights).*   
+###### -- *geom_bar() makes bar chart by using stat_count(), counting the number of cases at each x poisition. geom_bar() is recommended if you want the heights of the bars to represent values in the data.*  
+###### -- https://ggplot2.tidyverse.org/reference/geom_bar.html
+##### 2. Plot ggplot(data=mpg, aes(x=hwy)) + geom_bar(). Replace the geom with a stat to make the same graph.  
+```{r}
+ggplot(data=mpg, aes(x=hwy)) + geom_bar()
+ggplot(data=mpg, aes(x=hwy)) + stat_count()
+```
+  
+##### 3. Which 4 variables does stat_smooth() compute? How are these variables displayed on a graph made with geom_smooth()? What parameters (i.e. inputs to the function) control its behaviour?    
+###### -- *stat_smooth() function computes y, ymin, ymax, se(predicted value, lower pointwise C.I around the mean, upper pointwise confidence interval around the mean, standard eror)*    
+###### -- *Line fitted between the lower and upper bound of C.I are displayed on a graph, making use of 4 variables*  
+###### -- *Behavior is controlled by formula used in smoothing function, smoothing method(function), missing values removal/or not(method, formula, na.rm)*  
+###### -- http://sape.inf.usi.ch/quick-reference/ggplot2/geom  
+
+##### 4. Most geoms and stats come in pairs. Read through the documentation and make a list of 5 pairs. Notice the ggplot syntax helps you to understand when a geom and a stat go together.
+###### -- *geom_bar() stat_count(), geom_density() stat_density(), geom_smooth() stat_smooth(), geom_qq_line() stat_qq_line(), geom_boxplot() stat_boxplot()*
+###### -- https://ggplot2.tidyverse.org/reference/
+
+##### 5. In our proportion bar chart, we need to set group = 1. Why? In other words what is the problem with the graph? Specifically, what denominator is ggplot using to determine proportions?    
+###### -- *The proportion bar chart draws barplot with computed proportions of the sample.*   
+###### -- *But geom_bar() by defuault makes the height of the bar proportional to the number of cases in each group, because geom_bar() uses stat_count() by default. This means it counts the number of cases at each x poisition.*  
+###### -- *Due to default assignment, without setting group=1, proportions are all 1 for each x pisitions, which does not make sense.* 
+```{r}
+ggplot(data = diamonds) +
+geom_bar(mapping = aes(x = cut, y = ..prop..))
+
+ggplot(diamonds) +
+geom_bar(aes(x = cut, y = ..prop.., group = 1))
+```
+  
++ ##### 2.5 grammar of graphics: Positional adjustments  
+##### 1. What is the problem with this plot? How could you improve it?
+###### -- *Dot in plot does not necessarily corresponds to one car*  
+###### -- *To address issue to see multiple cars represented by single dot, use geom_jitter(takes every dots and jitters little bit random noise up or down, which makes you to see the cluster/masses in single dot*  
+###### -- *Or we can you geom_count(), which takes same data, instead of jittering dot, it makes dot bigger to show how many cars are hiding in a single dot*
+###### -- *or use alpha parameter to give the same effect but with intensity of color*
+```{r}
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) + geom_point()
+```  
+
+##### 2. Compare and contrast geom_jitter() with geom_count(). Use vocabulary from the “grammar of graphics” (see section headings) to support your argument.  
+###### -- *Geom_jitter(takes every dots and jitters little bit random noise up or down, which makes you to see the cluster/masses in single dot*  
+###### -- *Geom_count(), which takes same data, instead of jittering dot, it makes dot bigger to show how many cars are hiding in a single dot*  
+```{r}
+ggplot(mpg) + 
+geom_jitter(mapping = aes(x = cty, y = hwy))
+ggplot(mpg) + 
+geom_count(mapping = aes(x = cty, y = hwy))
+```  
+  
+##### 3. What’s the default position adjustment for geom_bar()? What did we add to the code to change the default behavior of geom_bar?  
+  
+###### -- *The stacking is performed automatically by the position adjustment specified by the position argument.*  
+  
+###### -- *To change the default behabior of geom_bar, we added; position = "dodge" placing overlapping objects directly beside one another. This makes it easier to compare individual values.*
+  
+
+  
++ ##### 2.6 grammar of graphics: Coordinate systems  
+  
+##### 1. What happens when you use coord_flip()?  
+###### -- *coord_flip() switches the x and y axes.*  
+  
+##### 2. What does the plot below tell you about the relationship between city and highway mpg? What does geom_abline() do? Why is coord_fixed() important?  
+  
+###### -- *The plot shows the overall trend of highway mpg increasing with city miles per gallon increase. The relationship is almost linear but possibly maybe intercept higher than 0*  
+  
+###### -- *abline() draws a line with intercept = 0 and slope = 1 with default which is 45 degree line.*  
+  
+###### -- *Coord_fixed ensures that one unit on the x-axis is the same length as one unit on the y-axis. With ratio adjusted as 1, it helps us to be interpret the plot without making mistake with the different ratio in each axis.*  
+  
+###### -- https://ggplot2.tidyverse.org/reference/coord_fixed.html  
+```{r}
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) + geom_point() + geom_abline() + coord_fixed()
+```

@@ -1,0 +1,446 @@
+---
+title: "30535 Skills Problem Set 3"
+author: "Hye-Min Jung"
+date: "5/1/2020"
+output: html_document
+---
+This submission is my work alone and complies with the 30535 integrity policy. **Hye-Min Jung**  
+Collaborators: Boseong Yun  
+Late coins used this pset: 1. Late coins left: 8. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(R.cache)
+library(styler)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(nycflights13)
+flights <- nycflights13::flights
+```
+
+I've adhere to style guide using styler, using "Style active file" and "Style selection" from the Addin menu.
+
+# 2 R for Data Science Exercises  
+## 2.1 Transformations: Grouped operations with mutate() (and filter())
+
+1. Delays are typically temporally correlated: even once the problem that caused the initial delay has been resolved, later flights are delayed to allow earlier flights to leave.
+
+1-a. Order flights by departing airport, arrival airport, day, and scheduled departure time. For each flight, use lag() and group_by() to compute the delay on the previous flight – if there is such a flight on the same day.
+* Data frame named `lagged_flights` is output for 1-a. 
+* First, I ordered flights with origin, dest, year, month, day, sched_dep_time. These columns are selected becasue, intuitively delay that cause problem to later flights will be in the same year, month, day and origin.
+  + (In the first step, I included also origin because question asked to include dest when ordering. But I would personally prefer excluding dest for ordering, since the destination will not directly related to the delay compare to the other factors.) 
+* Second, I lagged delay by previous scheduled flight within a day. 
+```{r}
+not_cancelled <- filter(flights, !is.na(dep_delay), !is.na(arr_delay))
+
+(reordered_flights <-
+  not_cancelled %>%
+  select(origin, dest, sched_dep_time, year, month, everything()) %>%
+  group_by(origin, dest, year, month, day, sched_dep_time) %>%
+  arrange(origin, dest, year, month, day, sched_dep_time))
+
+(lagged_flights <-
+  reordered_flights %>%
+  group_by(day) %>%
+  mutate(previous_dep_delay = lag(dep_delay)) %>%
+  select(previous_dep_delay, dep_delay, sched_dep_time, origin, dest, year, month, everything()))
+```
+
+1-b. Make a plot which shows the relationship between a flight’s delay and the delay of the immediately preceding scheduled flight. You have a lot of data, so think carefully about how to develop a plot which is not too cluttered.
+```{r}
+# install.packages("hexbin")
+library(hexbin)
+ggplot(data = lagged_flights) +
+  geom_hex(mapping = aes(x = previous_dep_delay, y = dep_delay)) +
+  labs(
+    title = "Relationship between flight's delay with preceding flight's delay (min)",
+    x = "Previous flight's delay",
+    y = "Flight's delay"
+  )
+
+ggplot(data = lagged_flights) +
+  geom_bin2d(mapping = aes(x = previous_dep_delay, y = dep_delay)) +
+  labs(
+    title = "Relationship between flight's delay with preceding flight's delay (min)",
+    x = "Previous flight's delay",
+    y = "Flight's delay"
+  )
+
+ggplot(data = lagged_flights) +
+  geom_point(mapping = aes(x = previous_dep_delay, y = dep_delay), alpha = 1 / 100) +
+  labs(
+    title = "Relationship between flight's delay with preceding flight's delay (min)",
+    x = "Previous flight's delay",
+    y = "Flight's delay"
+  )
+```
+2. Now we will look at delays that occur in the air. We will need a sense of how long a flight is.
+
+2-a. Compute the air time for each flight relative to the median flight to that destination. Which flights were most delayed in the air?
+  + `US468` was most delayed flight in the air. 
+  + Computing median air time: I computed median air time for each destinations by using group_by and created column `median_air_time` by mutate.
+  + Computing relative air time: I differentiated air_time with median air time and created column median_air_time and created column `relative_air_time` using mutate.
+  + Finding flights most delayed in the air: Using carrier+flight as identifier of the each flight, I grouped by carrier and flight and calculated mean for relative air time. Rearranging the average delay for each flights, I found US468 was most delayed flight in the air. 
+```{r}
+(median_included_flights <-
+  not_cancelled %>%
+  select(dest, air_time, tailnum, everything()) %>%
+  group_by(dest) %>%
+  mutate(median_air_time = median(air_time)) %>%
+  select(dest, air_time, median_air_time, tailnum, everything())) %>%
+  arrange(dest)
+
+median_included_flights %>%
+  mutate(relative_air_time = air_time - median_air_time) %>%
+  select(dest, air_time, median_air_time, relative_air_time, everything()) %>%
+  group_by(carrier, flight) %>%
+  summarise(average_delay = mean(relative_air_time)) %>%
+  arrange(desc(average_delay))
+```
+
+3. For each plane, count the number of flights before the first delay of greater than 1 hour. (Hints: Construct a Boolean variable for every flight which measures whether it had a delay of greater than 1 hour and then use cumsum).
+  + Resource: https://rpubs.com/woodc/148979
+  + Resource: https://stat.ethz.ch/R-manual/R-devel/library/base/html/cumsum.html
+```{r}
+flights %>%
+  group_by(tailnum) %>%
+  arrange(time_hour) %>%
+  mutate(
+    cum = arr_delay > 60,
+    cum_any = cumsum(cum)
+  ) %>%
+  filter(cum_any < 1) %>%
+  tally(sort = TRUE)
+```
+
+## 2.2 Exploratory Data Analysis
+### 2.2.1 EDA: Exploring variation
+1. Using the diamonds dataset, explore the distribution of `price`.
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(aes(x = price))
+```
+  
+1-a. Describe the overall pattern. Does it fit your expectations?    
+  + The distribution of diamond price has extremely long right tail. It corresponds to my expectation, in a sense that the diamond price range is diverse and spans all the way towards extremely expensive prices.  
+
+1-b. Do you discover anything unusual or surprising? (Hint: Carefully think about the binwidth and make sure you try a wide range of values.)  
+  + Unsually sudden drop was detected when I specfied `bindwidth = 100`. So I subset the data with price<2500. Looking closer with subset of data, I could identify empty bin in price range around 1500. 
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = price), binwidth = 100) +
+  labs(title = "Distribution of diamonds price")
+
+diamonds_cheap <-
+  diamonds %>%
+  filter(price < 2500)
+
+ggplot(data = diamonds_cheap) +
+  geom_bar(aes(x = price)) +
+  labs(title = "Distribution of diamonds price less than 2500")
+```
+  
+  
+2. Explore the distribution of `carat`.
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(aes(x = carat)) +
+  labs(title = "Distribution of carat")
+
+diamonds_small <-
+  diamonds %>%
+  filter(carat < 2.1)
+
+ggplot(data = diamonds_small, aes(x = carat)) +
+  geom_histogram(binwidth = 0.01) +
+  labs(title = "Distritution of carat less than 2.1")
+
+ggplot(data = diamonds_small) +
+  geom_point(aes(x = carat, y = price)) +
+  labs(title = "Carat and price relationship")
+
+ggplot(data = diamonds_small, aes(x = carat, y = price)) +
+  geom_boxplot(aes(group = cut_width(carat, 0.1))) +
+  labs(title = "Carat and price relationship in quantiles")
+```
+2-a. Describe the overall pattern. Does it fit your expectation given what you saw in prices?  
+
+  + There are decreasing trend as carat increases with cyclical repetition with approximately 0.5 carat binwidth.  
+
+  + It is beyond my expectation because, price distribution did not exhibit repetitive pattern as carat is.  
+
+2-b. How many diamonds are 0.99 carat? How many are 1 carat? What do you think is the cause of the difference?  
+
+  + 23, 1558 for 0.99 and 1 carat diamonds respectively.  
+
+  + This difference can be coming from the market preference towards 1 carat diamonds than 0.99. Because producers don't produce 0.99 as much as 1 carat due to the diamonds standards. Also for customers, wouldn't look for 0.99 carat since same price range 1 carat diamonds exist and is offered with more variety in the market.  
+
+  + resource : https://www.quora.com/Should-I-buy-0-99-carat-diamond-or-1-carat-diamond
+
+```{r}
+diamonds %>%
+  count(carat)
+```
+
+```{r}
+diamonds %>%
+  group_by(carat) %>%
+  summarise(ave_price = mean(price))
+```
+
+3. Compare and contrast coord_cartesian() vs xlim() or ylim() when zooming in on a histogram. What happens if you leave binwidth unset? What happens if you try and zoom so only half a bar shows?
+
+  + If I leave binwidth unset, `coord_cartesian()` and `xlim()`both sets stat_bin() using bins = 30. But I change binwidth using `binwidth`. 
+  
+  + `coord_cartesian()`: Setting limits on the coordinate system will zoom the plot (like you're looking at it with a magnifying glass), and will not change the underlying data like setting limits on a scale will. This command doesn’t eliminate any data points but simply zooms the plot to the desired region.
+  + `xlim()` or `ylim()`: removes rows containing non-finite values (stat_bin) and rows containing missing values (geom_bar). 
+  + Comparison: `xlim`, `ylim` removes data points, whereas the `coord_cartesian` simply zooms the plots. This causes trouble when ggplot2 is using one of the stat_ functions to compute something (such as a smoothed fit to data, a density, or a contour) from the underlying data before plotting.
+  + Also note how xlim and ylim inside coord_cartesian don't exclude the data.
+
+  + If I try to zoom in on half a bar, `coord_cartesian()` does not show any empty bin, whereas `xlim()` or `ylim()` and `coord_cartesian(xlim = c(), ylim = c())` has empty bin.
+  
+  + resource: https://ggplot2.tidyverse.org/reference/coord_cartesian.html
+  + resource: http://rstudio-pubs-static.s3.amazonaws.com/209392_437ec4da7fa2432d831320f3591e7491.html
+  
+
+  
+```{r}
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram() +
+  coord_cartesian(xlim = c(0, 10000), ylim = c(0, 10000)) +
+  labs(title = "Histogram of diamond price(coord_cartesian $5000~$10000)")
+
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram() +
+  xlim(c(0, 10000)) +
+  ylim(c(0, 10000)) +
+  labs(title = "Histogram of diamond price(xlim, ylim $5000~$10000)")
+
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram(binwidth = 30) +
+  coord_cartesian(xlim = c(0, 10000), ylim = c(0, 10000)) +
+  labs(title = "Histogram of diamond price(coord_cartesian, xlim, ylim, binwidth)")
+
+# zoom half a bar
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram() +
+  coord_cartesian(xlim = c(0, 10000), ylim = c(0, 5000)) +
+  labs(title = "Zoomed histogram of diamond price(coord_cartesian $5000~$10000)")
+
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram() +
+  xlim(c(0, 10000)) +
+  ylim(c(0, 5000)) +
+  labs(title = "Zoomed histogram of diamond price(xlim, ylim $5000~$10000)")
+
+ggplot(data = diamonds, aes(x = price)) +
+  geom_histogram(binwidth = 30) +
+  coord_cartesian(xlim = c(0, 10000), ylim = c(0, 5000)) +
+  labs(title = "Zoomed histogram of diamond price(coord_cartesian, xlim, ylim, binwidth)")
+```
+
+### 2.2.2 EDA: Navigating NAs
+1. What happens to missing values in a histogram? What happens to missing values in a bar chart? Why is there a difference?
+* Missing values are ommited in a histogram, whereas missing values are counted and treated as a category in bar chart. 
+* Difference: 
+  + As mentioned in lecture 1, geom_bar has 2 steps : (1) stat_count() (2) build plot.
+  + In the first step, geom_bar() transforms the data with the "count" stat, which returns a dat set of cut values and counts.
+  + In the second step, geom_bar() uses the transformed data to build the plot. cut is mapped to the x axis, count is mapped to the y axis. 
+* Therefore, in the geom_bar, it aggregates any string value, even ncluding "NA", and represent the total number of "NA" string values, just like other categorical value. 
+* On the other hand, hitogram represents continous variabls that is numeric. So it automatically omits text string value. 
+
+* cf. Histogram: visualise the distribution of a single continuous variable by dividing the x axis into bins and counting the number of observations in each bin.
+* cf. Bar chart, geom_bar(), uses stat_count() by default: it counts the number of cases at each x position. 
+
+
+```{r}
+diamonds %>%
+  ggplot(aes(x = price)) +
+  geom_histogram()
+
+diamonds %>%
+  ggplot(aes(x = price)) +
+  geom_bar()
+```
+
+  
+2. What does na.rm = TRUE do in mean() and sum()?
++ As we've learned in lecture 2, it removes all NA values. NA values are contagious. If I set to FALSE when I have NA values, then I will end up with contagious NA values to enable calculations and printi NA values as results. 
+
+# 3 Exploratory Data Analysis: Covariation
+1. Looking at the table below it appears that fair is nearly the best cut of diamond and ideal the worst cut. But, the opposite is true!  
+a. What variable in the diamonds dataset is most important for predicting the price of a diamond? 
+* Carat is the most important variable for predicting the price of a diamond. 
+  + First, Correaltion for carat with price was highest(0.92) among all other continous variables, when plotted `corrplot`.
+  + Second, I would ranked graphical relevance as follows; carat(most relevant) > x(moderate relevance) > y, z(less relevant) > depth, table(least relevant). Carat can relatively well predict the price range than other continuos variables. Because except for carat, variation in x-axis is so small, it is hard to predict for any x values that out of range that are not plotted by observed data.
+  + Additionally, regressing all the variables on price, carat has the highest coefficient. Although multicolinearity issue should be prevalent, if we simply were to look at the result, carat has the highest association with diamond price. Or alternatively, we can run regression for each variables with price all one by one and compare the R square. 
+* I used correlation plots to decide the most important variable for predicting price of a diamond and I've excluded categorical variables for calculating correlations. Because, diamond price variation is extremely large conditioning on whichever variables. Therefore, categorical variables cannot predict the price well enough since there are so much variations.
+  
+```{r}
+lm(price ~ ., data = diamonds)
+```
+
+```{r}
+
+(numeric_diamonds <- diamonds %>%
+  select(carat, depth, table, x, y, z, price))
+library(corrplot)
+corrplot(cor(numeric_diamonds), method = "number")
+
+ggplot(data = diamonds) +
+  geom_point(aes(x = carat, y = price)) +
+  labs(title = "Carat size & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_point(aes(x = depth, y = price)) +
+  labs(title = "Depth & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_point(aes(x = table, y = price)) +
+  labs(title = "Table & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_point(aes(x = x, y = price)) +
+  labs(title = "x(length in mm) & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_point(aes(x = y, y = price)) +
+  labs(title = "y(width in mm) & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_point(aes(x = z, y = price)) +
+  labs(title = "z(depth in mm) & diamond price relationship")
+
+ggplot(data = diamonds) +
+  geom_boxplot(aes(x = cut, y = price)) +
+  labs(title = "Cut & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_boxplot(aes(x = color, y = price)) +
+  labs(title = "Color & diamond price relationship")
+ggplot(data = diamonds) +
+  geom_boxplot(aes(x = clarity, y = price)) +
+  labs(title = "Clarity & diamond price relationship")
+```
+
+b. How is that variable correlated with cut?
+  + 0 ~ 1 carat, cut is negatively correlated with carat and this pattern is repetitive approximately every 0.3 binwidth.
+  + 1 ~ 3 carat, cut is negatively correlated with carat and this pattern is repetitive approximately every 0.5 binwidth.
+  + resource : https://ggplot2.tidyverse.org/reference/geom_histogram.html
+```{r}
+ggplot(data = diamonds, aes(carat, fill = cut)) +
+  geom_histogram(binwidth = 0.05) +
+  labs(title = "Frequency of diamond cut by carat")
+
+small_carat <-
+  diamonds %>%
+  filter(carat < 3)
+
+ggplot(data = small_carat, aes(carat, fill = cut)) +
+  geom_histogram(binwidth = 0.05) +
+  labs(title = "Frequency of diamond cut by carat smaller than 3")
+
+ggplot(small_carat, aes(carat, colour = cut)) +
+  geom_freqpoly(binwidth = 0.05) +
+  labs(title = "Distribution of diamond cut by carat smaller than 3")
+
+ggplot(data = diamonds) +
+  geom_boxplot(aes(x = reorder(cut, carat, FUN = median), y = carat)) +
+  labs(title = "Carat and cut relationship (reordered by median)", x = "cut", y = "carat")
+```
+
+  
+c. Explain why the table above is misleading.
+
+  + This table with mean as summary statistic is can easily mislead the relatoinship between price and cut. Average does not account for the distribution of the price. So if price variation is large, average of price conditioning on cut would poorly represent the actual price of diamonds.
+
+2. Recreate the count dataframe (see textbook for plot in 7.5.2) with adjustments to more clearly show the distribution of cut within colour.
+2-a. Which cut is most common in every color category?
+  + `Ideal` is most common cut in every color category, as you can see in the plot below.
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = color, fill = cut), position = "fill") +
+  labs(title = "Proportion of cuts within color categories", x = "Color", y = "Proportions of cuts")
+```  
+2-b. Repeat the exercise again to show distribution of colour within cut.
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = color, fill = cut), position = "dodge") +
+  labs(title = "Distribution of cut within color categories", x = "Color", y = "Cut distributions")
+```
+
+2-c. Using the dataframe you just produced as input, reproduce the following graph.
++ resource : https://stackoverflow.com/questions/20226487/how-to-annotate-geom-bar-above-bars
+```{r}
+
+ggplot(data = diamonds) +
+  geom_bar(
+    mapping = aes(x = color, y = stat(prop), group = 1),
+    show.legend = FALSE
+  ) +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~cut) +
+  labs(x = "color", y = "prop")
+```
+
+3. Instead of summarising the conditional distribution of price by carat size with a boxplot (see 7.5.3), you could use a frequency polygon, where you map binned carat data to the color aesthetic.  
+
+3-a. Make a frequency polygon using cut_width() and another using cut_number(). Adjust the parameters until you think the graphs are most useful.
++ resource : https://cran.r-project.org/web/packages/ggplot2/ggplot2.pdf
+```{r}
+ggplot(data = diamonds, mapping = aes(x = price, colour = cut_width(carat, 1))) +
+  geom_freqpoly() +
+  labs(title = "Distribution of diamond price by carat")
+
+ggplot(data = diamonds, mapping = aes(x = price, colour = cut_number(carat, 10))) +
+  geom_freqpoly() +
+  labs(title = "Distribution of diamond price by carat")
+```
+3-b. How does this affect your visualisation of the joint distribution of carat and price and your ability to interpret them?
+  + `Cut_width` sets bin width of carats whereas cut_number patitions carat into specified number of bins. 
+  + This gives different visualizations, unless you equalize the parameters used in two plots to give exactly same sets of the range and the number of bins. 
+  + Therefore, two plots are interpreted differently; I would interpret `cut_width(carat, 1)` freqpoly plot to explain 'distributional change in diamonds price with a unit increase in carat size'. Whereas, for `cut_number(carat, 0.5)` freqpoly graph, I will interpret it as `10 different levels of carat size and the distributions of diamonds price'.
+
+4. Visualise the distribution of carat, partitioned by price.
+```{r}
+ggplot(data = diamonds, mapping = aes(x = carat, colour = cut_number(price, 10))) +
+  geom_freqpoly() +
+  labs(title = "Distribution of carat, partitioned by price.")
+
+ggplot(data = diamonds) +
+  geom_boxplot(mapping = aes(x = carat, y = cut_number(price, 10))) +
+  labs(title = "Conditional distribution of carat by price (binned into 10 price range)")
+```
+  
+5. How does the price distribution of very large diamonds compare to small diamonds? Is it as you expect, or does it surprise you? Why?
+  + As diamonds size increases, distribution of price becomes very flat in the graph 1 in prior question. 
+  + It is what I expected, as diamond price skyrockets as carat size increases. 
+  + This is not surprising. This is intuitively understandable, since large diamonds are rare, more expensive so market demand is low. Therefore, only few numbers of large diamonds are seen compare to small diamonds. 
+
+6. So far we’ve focused on visualizing covariation of two variables. We can add a third dimension in several ways. For example, we could map to a third aesthetic or add facets. Combine two of the techniques you’ve learned in this class (not just this lecture) to visualise the combined distribution of cut, carat, and price.
++ resource : https://stagraph.com/HowTo/Plot/Geometries/Geom/violin
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(
+    mapping = aes(x = carat),
+    show.legend = FALSE
+  ) +
+  theme(aspect.ratio = 1) +
+  labs(x = NULL, y = NULL) +
+  facet_wrap(~cut) +
+  labs(title = "'Diamond price vs. carat size' by 5 cut categories", x = "Carat", y = "Price")
+```
+
+7. Two dimensional plots reveal outliers that are not visible in one dimensional plots. For example, some points in the plot below have an unusual combination of x and y values, which makes the points outliers even though their x and y values appear normal when examined separately. Consider the two plots below. Which geom is better for identifying outliers? Why?
+  + `geom_point` is better for identifying outliers. With `geom_point`, I can easily distinguish suspicious observations that are away from other clustered observations, because all data observations represented as single points.  
+  + However, `geom_bin2d` is not as easy as `geom_point` when looking for outlier observations. We can know the population of each rectangular areas, however, it is difficult to pinpoint points that are plotted abnormally away from normal observations. Because it divides the plane into rectangles, counts the number of cases in each rectangle, and then (by default) maps the number of cases to the rectangle's fill. Although, `geom_bind2d` is plot alternatively used for `geom_point`, `geom_point` is better when looking for outliers.
+  + resource: https://ggplot2.tidyverse.org/reference/geom_bin2d.html
+```{r}
+ggplot(data = diamonds) +
+  geom_point(mapping = aes(x = x, y = y)) +
+  coord_cartesian(xlim = c(4, 11), ylim = c(4, 11)) +
+  labs(title = "1st geom plot for identifying outliers (better)")
+
+ggplot(data = diamonds) +
+  geom_bin2d(mapping = aes(x = x, y = y)) +
+  coord_cartesian(xlim = c(4, 11), ylim = c(4, 11)) +
+  labs(title = "2nd geom plot for identifying outliers")
+```

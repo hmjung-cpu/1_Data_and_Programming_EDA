@@ -1,0 +1,519 @@
+---
+title: "30535 Skills Problem Set 4"
+author: "Hye-Min Jung"
+date: "5/8/2020"
+output: html_document
+---
+This submission is my work alone and complies with the 30535 integrity policy. **Hye-Min Jung**  
+Collaborators: M Samiul Prantar, Boseong Yun  
+Late coins used this pset: 2. Late coins left: 7. 
+
+Follow the style guide including the new points on styling joins.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(R.cache)
+library(styler)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+# 1 Exercises  
+
+## 1.1 Tidy data with pivot_wider() and pivot_longer()
+
+1. Compute TB rate per 10000 people using table1, then table2, and finally table4a + table4b. The output is three identical tibbles with columns country, year and rate.
+* **Which representation is easier to work with?** 
+  + `table1` is easiest to work with, since it is tidy dataset.
+* **Which is harder?** 
+  + `table2` is harder and `table4a+table4b` is the hardest.
+* **Why?** 
+  + Tidy dataset has (1) variables in columns, (2) observations in rows and (3) values in cells. 
+  + Among 3 datasets, only `table1` satisfied these rules, whereas both `table2` and `table4a+table4b` violated the rules. 
+
+  + `table2` has 1 problem: 1 observation in multiple rows. So I pivot wide `table` to make it tidy.
+  + `table4a`, `talbe4b` have 2 problems: Data inside the columns names in `table4a`, `table4b` are pivoted long into a tidy form. Also, data were splitted acorss 2 tables. So I joined splited data using left_join.
+  + On top of that, `table4a+table4b` had data even separated across two tables. So it was even hearder to work with.
+
+```{r}
+table1  %>%
+   mutate(rate = cases / population * 10000 ) %>%
+   select(country, year, rate)
+
+table2 %>% 
+  pivot_wider(
+    names_from = "type", 
+    values_from = "count"
+    ) %>%
+  mutate(rate = cases / population * 10000) %>%
+  select(country, year, rate)
+
+tidy4a <- 
+  table4a %>%
+  pivot_longer(cols = `1999`:`2000`,
+               names_to = "year",
+               values_to = "cases")
+tidy4b <-
+  table4b %>%
+  pivot_longer(cols = `1999`:`2000`,
+               names_to = "year",
+               values_to = "population")
+
+left_join(tidy4a, tidy4b) %>%
+  mutate(rate = cases / population * 10000) %>%
+  select(country, year, rate)
+```
+
+2. pivot_wider() and pivot_longer() are not perfectly symmetrical. Carefully consider the following example. 
+* **Why do we need quotes on the arguments names_to and values_to, but not names_from and values_from?**
+  + Because they do not exist in dataset, we need put names, values in quotes for the arguments for `names_to` and `values_to`, 
+  + Whereas, for `names_from` and `values_from`, we don't need quotes on the arguments because it is existing column names
+```{r}
+stocks <- tibble(
+  year = c(2015, 2015, 2016, 2016),
+  half = c(1, 2, 1, 2),
+  return = c(1.88, 0.59, 0.92, 0.17)
+)
+
+stocks %>%
+  pivot_wider(names_from = year, values_from = return) %>%
+  pivot_longer('2015':'2016', names_to = "year", values_to = "return")
+```
+
+3. This code fails. 
+* **Explain the error message.**
+  + `Error in inds_combine(.vars. ind_list) : Position must be between 0 and n`
+  + This error message suggests there is a problem with using the range of columns.
+  + resource : https://www.reddit.com/r/rstats/comments/dcassr/average_by_group_of_variables_code_used_to_work/
+* **How could it be fixed?**
+  + Errors can be fixed by putting backticks for column names. (1999:2000 to `1999`:`2000`)
+  + resource : https://stackoverflow.com/questions/32512501/gather-with-tidyr-position-must-be-between-0-and-n-error
+```{r}
+table4a %>% 
+  pivot_longer('1999':'2000', names_to = "year", values_to = "cases")
+```
+
+
+* **4. Why does pivot_wider fail on this tibble?**
+  + Since we have 2 rows with age, height for "Phillip Woods" but 1 rows for each for "Jessica Cordero", `pivot_wider` fails on this tibble, because name and key columns do not uniquely identify rows. 
+  + This issue can be resolved by adding a new column to account for observation numbers.
+We could solve the problem by adding a row with a distinct observation count for each combination of name and key.
+
+* **Add a new column to address the problem and show that pivot_wider works on your new updated dataset.**
+```{r}
+people <- tribble(
+  ~name,            ~key,    ~value, ~observation,
+  #-----------------|--------|------|-------------
+  "Phillip Woods", "age", 45, 1,
+  "Phillip Woods", "height", 186, 1,
+  "Phillip Woods", "age", 50, 2,
+  "Phillip Woods", "height", 185, 2,
+  "Jessica Cordero", "age", 37, 1,
+  "Jessica Cordero", "height", 156, 1,
+)
+people
+people %>%
+  pivot_wider(names_from = "key", 
+              values_from = "value")
+```
+
+5. Tidy the pivot table below. 
+* **Do you need to make it wider or longer?** 
+  + We need to make it longer to make each variable is in its own column.
+* **What are the variables?**
+  + Variables are `pregnant`, `gender`, `count`
+```{r}
+preg <- tribble(
+  ~pregnant, ~male, ~female,
+  "yes", NA, 10,
+  "no", 20, 12
+)
+
+preg %>%
+  pivot_longer(cols ='male':'female',
+               names_to = "gender",
+              values_to = "count")
+```
+
+* **6. What do the extra and fill arguments do in separate()?**
+  + `extra` discard additional pieces/drop extra values.
+  + `fill` fills missing pieces with `NA` if there are not enought pieces.
+```{r}
+tibble(x = c("a,b,c", "d,e,f,g", "h,i,j,extra")) %>%
+  separate(x, c("one", "two", "three"), extra = "warn")
+
+tibble(x = c("a,b,c", "d,e", "f,g,i")) %>%
+  separate(x, c("one", "two", "three"), fill = "warn")
+```
+
+
+
+## 1.2 tidying case study
+
+1. In this WHO case study in Ch 12.6 Hadley set na.rm = TRUE just to make it easier to check that we had the correct values.
+  
+1-1.  
+
+* **Are there implicit missing values?** 
+  + Yes, there are implicit missing values. 
+  + Because #of rows for who with complete cases of (country, year) 7446 > #of rows in who 7240
+* **If there are implicit missing values, how many rows? If not, show how you know that there are not.**
+  + 206 rows are missing values. 
+  + 7446 is the number of rows for who after automatically completing for implicitly missing values with (country, year) combination. 
+  + 7240 is the number of rows data in who.
+
+```{r}
+who %>%
+  nrow()
+
+who %>%
+  complete(country, year) %>%
+  nrow()
+
+7446-7240
+
+who
+```
+
+1-2.  
+
+* **How many country-year pairs are explicitly missing(NA) TB data?**  
+  + Every country-year pairs has explicitly missing data flagged with `NA` in who.
+  + 7240 country-year pairs.
+```{r}
+who %>%
+  filter(is.na(country) | is.na(year))
+```
+2. In this WHO case study in Ch 12.6,  
+* **what’s the difference between an NA and zero?**
+  + `NA` is used to indicate missing data. 
+  + `Zero` is used to report 0 cases and it means data exists for the case.
+```{r}
+who %>%
+  filter(new_ep_f014 == 0)
+
+who %>%
+  filter(is.na(new_ep_f014))
+```
+
+* **3. What happens if you neglect the mutate() step?**
+  + I will get errors in subsequent steps, if I neglect mutate(key = stringr::str_replace(key, "newrel", "new_rel")) step.
+  + This step is needed to make a minor fix to the format of the column names. Because the names are slightly inconsistent.
+  + By replacing character "newrel" with "new_rel", it will make variable names consistent.
+  
+
+4. Health outcomes are often sexed. As in certain maladies are more associated with males or females. Using the tidied WHO data, you will make an informative visualisation to address the question: 
+
+> Question: “To what extent is Tuberculosis associated with a specific sex and has this changed from 1997 onward?”
+
+> Query:
+
+1. For each country, year, and sex compute the total number of cases of TB.
+
+```{r}
+#tidy who dataset 
+
+who_tidy <-
+  who %>%
+  pivot_longer(cols = 'new_sp_m014':'newrel_f65',
+               names_to = "key",
+               values_to = "cases",
+               values_drop_na = TRUE
+               ) %>%
+  mutate(
+    key = stringr::str_replace(key, "newrel", "new_rel")
+    ) %>%
+  separate(key, c("new", "type", "sexage"), sep = "_") %>%
+  select(-new, -iso2, -iso3) %>%
+  separate(sexage, c("sex", "age"), sep = 1)
+
+(who_by_cys <- 
+  who_tidy %>%
+  group_by(country, year, sex) %>%
+  summarise(cases = sum(cases))%>%
+  pivot_wider(names_from = "sex",
+              values_from = "cases")
+  )
+
+```
+
+2. Using raw values is probably not going to provide clear evidence. 
+* **Why not?**
+  + To address evidence for the gender specific difference, it will be better to work with proportion or difference between male and female cases.
+
+3. For each country-year, compute the ratio of male to female patients.
+```{r}
+who_by_cys %>%
+  summarise(male_to_female_ratio = m / f)
+```
+4. Producing these ratios by year (ignoring country) is probably a bad idea. 
+* **Why?**
+  + Producing these ratios by year (ignoring country) is bad idea.
+  + Just by looking at the ratios by year, it's extremely hard to distinguish what is driving fluctuations for these ratios, just by looking at the ratios by year. 
+  + If country is important factor, it might be misleading to ignore the country specific factors at all with this annual ratios.
+* **result:**
+```{r}
+(who_year <-
+  who_tidy %>%
+  group_by(year) %>%
+  summarise(total_male_cases = sum(cases[sex=="m"]),
+            total_female_cases = sum(cases[sex=="f"])) %>%
+  mutate(yr_male_to_female_ratio = total_male_cases / total_female_cases))
+
+who_year %>%
+  summarise(ave_ratio = mean(yr_male_to_female_ratio))
+```
+
+
+> Result:
+
+5. Make a sophisticated data visualiztion that address the question.
+
+“To what extent is Tuberculosis associated with a specific sex and has this changed from 1997 onward?”
+
+```{r echo=FALSE}
+who_tidy_97 <-
+  who_tidy %>%
+  filter(year > 1996)
+
+who_year_97 <-
+  who_year %>%
+  filter(year > 1996)
+
+ggplot() +
+  geom_bar(data = who_tidy_97, mapping = aes(x = year, fill = type)) +
+  geom_line(data = who_year_97, aes(x = year, y = yr_male_to_female_ratio * 3000)) +
+  scale_y_continuous(
+    # Specify names for the first y-axis
+    name = "TB cases",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(trans = ~ . / 3000, name = "Male to female ratio")
+  ) +
+  scale_x_continuous(breaks = seq(1997, 2013, by = 1)) +
+  scale_fill_discrete(name = "TB Types", labels = c("ep", "rel", "sn", "sp")) +
+  labs(title = "Figure a. TB Cases by Type and Male to Female ratio",
+       caption = "Data source: World Health Organization") +
+  theme(axis.text.x = element_text(angle = 90))   
+```
+
+
+> Answer (Figure a.): 
+
+6. Write a quick summary of lessons learned from your final data visualization. 
+
+* **Headline:** 
+  + In world wide scale, TB cases remains male biased with 1:1.7 male to female ratio on average (97'~ 13'). 
+
+* **Subpoints:**
+  + 1. Male TB cases has been always outweigh female cases (1:1.73 on average) and this tendency has remained from 1997 onward.
+  + 2. In 2006, `ep` and `sn` cases first appear and it contributes to sudden increase in total TB cases. 
+  + 3. Meanwhile, male to female ratio suddenly drop in 2006.
+  + 4. In 2013, there is `rel` first cases and also drop in male to female ratio.
+  
+  
+  + cf. Additional plots for clear zoom into male to female ratio(1. 3. 4.), TB cases by type. (2. 3. 4.)
+
+```{r echo = FALSE}
+ggplot(data = who_year_97) +
+  geom_line(aes(x = year, y = yr_male_to_female_ratio)) +
+  labs(title = "cf. Figure b. Male to female ratio by year for TB cases (1997~)",
+       y = "Male to female ratio",
+       caption = "Data source: World Health Organization") +
+  scale_x_continuous(breaks = seq(1997, 2013, by = 1))
+
+ggplot(data = who_tidy_97) +
+  geom_bar(mapping = aes(x = year, fill = sex)) +
+  scale_x_continuous(breaks = seq(1997, 2013, by = 1)) +
+  facet_wrap(~type) +
+  labs(title = "cf. Figure c. Yearly TB cases by type",
+       caption = "Data source: World Health Organization") +
+  theme(axis.text.x = element_text(angle = 90))   
+```
+  
+  + So, we need further analysis for TB types and genders, other factors to figure out what is driving the gender associated difference with TB cases.
+  + Difference could also possibly arise from country specific factors, since natural gender ratio cannot be a main reason driving gender difference. (The value for the entire world population is 1.01 males/female, with 1.07 at birth, 1.06 for those under 15, 1.02 for those between 15 and 64, and 0.78 for those over 65.)
+  + I would specifically focus on TB cases conditioning on differenct countries for further analysis.  
+  
+  
+  + resource: https://en.wikipedia.org/wiki/Human_sex_ratio
+  + resource: https://www.datanovia.com/en/blog/ggplot-axis-ticks-set-and-rotate-text-labels/
+  + resource: https://rpubs.com/MarkusLoew/226759
+
+# 2 R4DS Chapter 13 Joins part 1 
+
+**1. Compute the average delay by destination, then join on the airports data frame so you can show the spatial distribution of delays.**
+
+```{r, include = FALSE}
+library(nycflights13)
+#install.packages("maps")
+library(maps)
+```
+
+```{r}
+not_cancelled <- 
+  flights %>%
+  filter(!is.na(dep_delay), !is.na(arr_delay)) %>%
+  filter(dest != "HNL", dest != "ANC")
+
+(mapping <-  
+not_cancelled %>%
+  group_by(dest) %>%
+  summarise(delay = mean(arr_delay)) %>%
+  inner_join(airports, by = c(dest = "faa")))
+```
+
+**Map of the United States, without airpots in Alaska and Hawaii. Size of the points display the average delay for each airport.**
+
++ resource : https://austinwehrwein.com/digital-humanities/creating-a-density-map-in-r-with-zipcodes/
+```{r}
+mapping %>%
+  ggplot() +
+  borders("state") +
+  geom_point(aes(lon, lat, color = delay), size = 2) +
+  coord_quickmap() +
+  labs(title = "Arrival delays by airports in US", x = "Longitude", y = "Latitude")
+```
+
+2. Add the location of the origin and destination (i.e. the lat and lon) to the flights data frame.
+```{r}
+flights %>%
+  left_join(airports, by = c("origin" = "faa")) %>%
+  left_join(airports, by = c("dest" = "faa")) %>%
+  select(origin, dest, lon.x, alt.x, lon.y, alt.y)
+```
+
+3. 
+* **Is each plane is flown by a single airline?**
+  + No, there are planes flown by more than one airline. 
+  + For instance, `N146PQ` is flown by 2 airlines, 9E and EV.
+  + (cf. Planes are identified by `tailnum`, since it's an ID that follows the plane regardless of ownership.)
+
+
+```{r}
+not_cancelled %>%
+  filter(!is.na(tailnum)) %>%
+  filter(tailnum == "N146PQ") %>%
+  select(carrier, tailnum) 
+
+not_cancelled %>%
+  filter(!is.na(tailnum)) %>%
+  group_by(tailnum) %>%
+  summarise(count_owners = n_distinct(carrier)) %>%
+  filter(count_owners > 1)
+```
+
+* **How many planes change ownership within the nycflight13 dataset?**
+  + 17 planes were owned by 2 carriers within nycflight13 dataset. 
+  + This implies that 17 planes changed their ownership.
+```{r}
+flights %>%
+  filter(!is.na(tailnum)) %>%
+  group_by(tailnum) %>%
+  summarise(count_owners = n_distinct(carrier)) %>%
+  filter(count_owners >1)
+```
+
+
+  
+4.   
+
+> Questiotion: Is there a relationship between the age of a plane and its delays? 
+
+> Query
+
+```{r}
+planes_rename <- 
+  planes %>%
+  rename(manufactured_in = year) 
+planes_rename
+
+age_delay <- 
+not_cancelled %>%
+  left_join(planes_rename, by = "tailnum") %>%
+  select(manufactured_in, dep_delay, arr_delay) %>%
+  group_by(manufactured_in) %>%
+  filter(!is.na(manufactured_in)) %>%
+  summarise(ave_dep_delay = mean(dep_delay),
+            ave_arr_delay = mean(arr_delay))
+```
+
+> Result:   
+
+* Is there a relationship between the age of a plane and its delays? 
+
+```{r echo=FALSE}
+ggplot(data = age_delay, aes(x = manufactured_in)) + 
+  geom_line(aes(y = ave_dep_delay, color = "departure")) + 
+  geom_line(aes(y = ave_arr_delay, color = "arrival")) +
+  labs(title = "Headline: Low association between average delay and manufacturing year", 
+       x = "Manufacturing year", 
+       y = "Average delay in minutes") + 
+  scale_x_continuous(breaks = seq(1956, 2013, by = 3)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_discrete(name = "Types of delay", labels = c("Arrival", "Departure"))  
+```
+
+
+* resource : https://www.datanovia.com/en/blog/how-to-create-a-ggplot-with-multiple-lines/
+  
+> Answer:  
+
+* **Headline:** 
+  + Low association between average delay and manufacturing year. 
+
+* **Subpoints:**
+
+1. Average arrival and departure delay don't have clear relationship with manufacturing year.
+2. This figure reveals low association between average delay and manufacturing year
+* Result of regressing average departure delay against manufacutring year: 
+  + 1 year increase in manufacturing year is associated with 0.1111 minute (6 seconds) increase in average departure delay, fixing the effect of the average arrival delay. 
+  + The older the manufactured year, the less delay is. 
+  + However, this time is so small so I would consider it as economically insignificant.
+3. Arrival delay and departure delay resembles another's movement, which is intuitively understandable.
+* Correlation between two is 0.73.
+4. However average departure delay is higher than arrival delay is counterintuitive.
+* I can suspect the airtime is always conservatively set longer than the airtime to refrain from arrival delay related complains. 
+
+```{r}
+cor(age_delay$ave_dep_delay, age_delay$ave_arr_delay)
+summary(lm(ave_dep_delay ~ manufactured_in, data = age_delay))
+```
+
+5. left_join the first 100 rows of flights to weather using year. 
+
+* **How many rows are there?**
+  + 2,611,500 rows
+* **How long does it take for the computer to do this join?**
+  + It takes about 1.299 seconds for the computer to run this join command.
+```{r}
+head_flights <- 
+    flights %>% 
+    head(100) %>% 
+    left_join(weather, by = "year")
+
+system.time(
+  {head_flights <- 
+    flights %>% 
+    head(100) %>% 
+    left_join(weather, by = "year")})
+
+dim(head_flights)
+```
+
+6. **Describe the result of using left_join to merge flights and weather based on year.**
+
+* 8,794,905,240 rows will be created after left_join to merge flights and weather based on year.
+  + 100:2611500=336776:x
+  + x = 2611500*336776/100
+* Since this is very heavy command for R to process, it will take long time to process the joining command. 
+```{r}
+nrow(weather)
+nrow(head_flights)
+nrow(flights)
+2611500*336776/100
+```
+

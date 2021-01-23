@@ -1,0 +1,503 @@
+---
+title: "Applied Problem Set 3"
+author: "Hye-Min Jung, Spencer Nederhood"
+date: "06/03/2020"
+output:
+  html_document:
+    number_sections: yes
+  pdf_document: default
+---
+
+This submission is our work alone and complies with the 30535 integrity policy.
+
+Add your initials to indicate your agreement: **HJ, SN**
+
+Add names of anyone you discussed this problem set with: **__**
+
+Late coins used this pset: 2. Late coins left: 1. 
+<!--Please update. You may use up to two for a given assignment. Note we added 5 late coins for a total of 9 for the quarter.)-->
+
+__Prelim questions__
+
+1. Have you deleted any Waze data that you downloaded onto your computer (answer this at the end of the problem set in the affirmative)?    
+
+A: Yes. 
+
+```{r Inital Database Setup, include=FALSE}
+library(tidyverse)
+library(RMySQL)
+library(ggmap)
+library(chron)
+library(lubridate)
+# Create connection to Waze database
+con <- DBI::dbConnect(RMySQL::MySQL(),
+                      user = "ppha30531",
+                      dbname="Waze2",
+                      port = 3306,
+                      password = "bUYjwnKXf49M2pb",
+                      host = "uchicagowaze.cfykgneqoh8w.us-west-2.rds.amazonaws.com"
+)
+```
+```{r Intermediate Database Setup, include=FALSE}
+# Show which tables are available from the Waze database
+DBI::dbListTables(con)
+# Create table referencing the data in the chiAlerts table
+# of the waze database
+chi_sql <- tbl(con, "chiAlerts")
+# Create local variable for data with a specified UUID
+# and time it
+before <- Sys.time()
+event_data <- chi_sql %>%
+  filter(uuid == "c5a73cc6-5242-3172-be5a-cf8990d70cb2") %>%
+  collect()
+after <- Sys.time()
+after - before
+# Create local variable for data with Chicago
+# and time it
+before <- Sys.time()
+chicago_data <- chi_sql %>%
+  filter(city == "Chicago, IL") %>%
+  collect()
+after <- Sys.time()
+after - before
+```
+
+# Waze data start-up (5 points)
+
+1. Which of the following methods will cause problems as you develop your 
+  solutions?
+    a. Use `filter()` to reduce the amount of data you pull while exploring data.
+       For example, you can filter by time and location to only get data for a 
+       small part of the city and/or over a short time period.
+    b. `collect()` a small sample data set so that the you have data in memory on your     
+       computer.
+    c. `collect()` the entire data set each time you want to work with it.
+  
+  A. (a) will not cause problems, becuase if you are only exploring data and you know enough about the fields and possible values that you can make knowledgeable filters and not mess anything up, then filtering is a good way to do minor data exploration quickly without waiting to make full dataset pulls. However this is obviously is only good for explorations, not solutions, as the question indicates, and you are still going back to the database each time with your new filter, whereas it could be easier to cut the datafile size down another way. In that case, collect() could be useful, where you could test certain relationships between key variables without having to draw on the whole dataset. In (c), the problem here is not the limitation of the data obviously, since you have it all, but pulling it each time, such as with this applied problem set, takes a while and is often not feasible. So out of any of these, the third is the least feasible, while the first two at least have limited usefulness. 
+
+2.. As is the case with any data set, Waze has to make decisions about what data
+  to store and how to measure it. Review the data documentation and the rest of 
+  the problem set. Propose a variable that Waze could feasibly track that is not 
+  available now or feasible and better way a to measure a variable currently in 
+  the dataset. Support your proposal with reasoning.
+
+A: I think it would be interesting to see if they started recording the number of incidences within a specific geographic "zone" (i.e. a traffic light just before an on-ramp, a bridge where there are a lot of rear-end collisions, etc.), aggregating these into a total, and then forming that total into a sort of "score" field that could be read as the "danger" score of a any specific geographic location. As it stands, I don't see anything specifically related to the history of a specific location or specific type of location, and I think this could be an interesting field to have because of the potential research purposes that would be made a lot easier, such as identifying the pros and cons of different street configurations, and right now there's nothing really like that in the data, not unless you make some calculations on your own, which don't get you far. 
+
+3. As is the case with most consumer data, Waze users are self-selecting. Write a 
+  few detailed sentences about how you think self-selection influences what data 
+  is present. 
+  
+  A: There are many ways self-selection could influence the data. One is that Waze users are highly focused in certain professions like Uber drivers, which could change the road coverage of the app, leaving certain roads that are not along major "tourist" pathways predictably underserved, such as residential areas. So Waze might simply not work in residential areas. On the other hand, Waze users went through the trouble of downloading the app and going through the trouble of being engaged users are probably young and technologically fluent, and so coule be predicated to be less accident prone and more engage in the road than senior drivers, which could influence the data by making it more reliable than you would otherwise predict from a random sampling of US drivers. 
+    
+    
+## Waze vision zero (15 points)
+1.  Look at Vision Zero Neighborhood High Crash Corridor #7. Plot the accidents in 
+    this corridor on a map. 
+    
+```{r}
+#Corridor 7 = N Western from George to Chicago; x = 41.934212; x = 41.895840
+corridor_seven_a <- chicago_data %>%
+  filter(str_detect(street,"N Western") == TRUE) %>%
+  arrange(location_y)
+corridor_seven_b <- corridor_seven_a %>%
+  filter(location_y <= 41.934212 & location_y >= 41.895840) 
+```
+```{r plotting incidents}
+bbox <- c(left = -87.73,
+          bottom = 41.89,
+          right = -87.65,
+          top = 41.937)
+corridor_map <- get_stamenmap(bbox, zoom = 14)
+CorridorSeven <-  ggmap(corridor_map)
+CorridorSeven +
+  geom_point(data = corridor_seven_b, aes(x = location_x, y = location_y), alpha = 1/10, position = "jitter")
+```
+```{r testing}
+CorridorSeven + 
+  stat_density2d(
+    aes(x = location_x, y = location_y, fill = ..level.., alpha = ..level..), 
+    size = 2, bins = 4, data = corridor_seven_b, 
+    geom = "polygon", contour = "TRUE"
+  )
+```
+
+2.  Around what intersection are accidents most common? Use Google Street View to look 
+    at this intersection. Do you see any problems?
+
+```{r most common crash areas}
+ggplot(data = corridor_seven_b, aes(x = location_y)) +
+  geom_bar(binwidth = .0001)
+ggplot(data = corridor_seven_b, aes(x = location_y)) +
+  geom_bar() + xlim(c(41.9065, 41.908))
+ggmap(corridor_map) +
+  geom_bin2d(data = corridor_seven_b, aes(x = location_x, y = location_y))
+```
+
+A: Accidents seem most common just south of the intersection of Western and North Avenue, around the latitude (location_x) x = 41.9068, which is right next to an intersection of two busy streets plus a nearby hospital, perhaps bringing in a lot of ambulances onto an already busy area. It is also near an intersection where a diagonal street intersects the street grid, which is conducive to crashes if I remember correctly.  
+
+### Transit Oriented Development (15 points)
+
+1. On October 21, the City of Chicago [declared](https://www.cityofchicago.org/city/en/depts/mayor/press_room/press_releases/2018/october/5Million_TransitOriented_Development_HighRidership_Bus_Corridors.html) the 79 and 66 bus routes as areas 
+  of focus for transit oriented development. The City says the plan addresses bus
+  "slow zones". 
+  Note: Watch out for "179th St". 
+  
+    a. For each corridor, plot traffic alerts by time of day.
+    
+```{r select 79 and 66 bus routes}
+#79th Street Bus:
+#79th/Lake Shore, -87.539729, 41.751907
+#79th/Cicero (first western stop actually on 79th), 41.749274, -87.741271
+bus79 <- chicago_data %>%
+  filter(street == "W 79th St" | street == "E 79th St") %>%
+  filter(type == "JAM" | type == "ACCIDENT") %>%
+  arrange(location_x)
+bus79 <- bus79 %>%
+  filter(location_x >= -87.741271 & location_x <= -87.539729)
+#66th Street Bus:
+#Chicago/Austin Terminal, 41.899321, -87.774772
+#215 E Chicago Ave (first eastern stop on Chicago), 41.896650, -87.620773
+bus66 <- chicago_data %>%
+  filter(street == "W Chicago Ave") %>%
+  filter(type == "JAM" | type == "ACCIDENT") %>%
+  arrange(location_x)
+bus66 <- bus66 %>%
+  filter(location_x >= -87.774772 & location_x <= -87.620773)
+```
+```{r bin and plot traffic alerts}
+##idea: on x axis, plot time, binned by 15 minute intervals
+##need: extract time from the scrape time
+bus79 <- bus79 %>%
+  mutate(
+    time = chron(times = substr(scrape_dt, 12, 19))
+  )
+ggplot(data = bus79, aes(x = time)) +
+  geom_bar() +
+  scale_x_time("time") +
+  ggtitle("Bus 79")
+bus66 <- bus66 %>%
+  mutate(
+    time = chron(times = substr(scrape_dt, 12, 19))
+  )
+ggplot(data = bus66, aes(x = time)) +
+  geom_bar() +
+  scale_x_time("time") +
+  ggtitle("Bus 66")
+```
+    
+    b. Using a reasoned approach, choose two additional corridors for comparison.
+          i. What corridors did you choose and why?
+          ii. Make comparison plots.
+          
+```{r}
+##idea: redo above section, w/ two new inputs
+##need: select two geocoordinates off of google maps
+#4 Cottage Grove Bus:
+#Michigan/Madison, 41.882300, -87.624235
+#3000 S Michigan, 41.841611, -87.623177
+bus4 <- chicago_data %>%
+  filter(street == "S Michigan Ave") %>%
+  filter(type == "JAM" | type == "ACCIDENT") %>%
+  filter(location_y >= 41.841611 & location_y <= 41.882300)
+bus4 <- bus4 %>%
+  mutate(
+    time = chron(times = substr(scrape_dt, 12, 19))
+  )
+ggplot(data = bus4, aes(x = time)) +
+  geom_bar() +
+  scale_x_time("time") +
+  ggtitle("Bus 4")
+#8 Halsted Bus:
+#Halsted and Monroe, 41.880616, -87.647048
+#Halsted & 79th, 41.750765, -87.644087
+bus8 <- chicago_data %>%
+  filter(str_detect(street, "S Halsted")) %>%
+  filter(type == "JAM" | type == "ACCIDENT") %>%
+  filter(location_y >= 41.750765 & location_y <= 41.880616)
+bus8 <- bus8 %>%
+  mutate(
+    time = chron(times = substr(scrape_dt, 12, 19))
+  )
+ggplot(data = bus8, aes(x = time)) +
+  geom_bar() +
+  scale_x_time("time") +
+  ggtitle("Bus 8")
+```
+A: The approach: the site activetrans.org identifies two additional bus routes, #4 cottage grove, and #8 halsted, as being one of the busiest routes in Chicago while also showing a dip in ridership in recent years, showing space for improvement. 
+  
+    c. Looking beyond traffic, what other alerts are very common in this area? 
+      Do you think these alerts would slow down the 66 / 79? If so, what steps 
+      could the City take to address the issues?
+      
+```{r}
+##idea: drop traffic and take frequency
+##need: filter and create table
+#79th Street Bus:
+#79th/Lake Shore, -87.539729, 41.751907
+#79th/Cicero (first western stop actually on 79th), 41.749274, -87.741271
+bus79_full <- chicago_data %>%
+  filter(street == "W 79th St" | street == "E 79th St") %>%
+  filter(type != "JAM" & type != "ACCIDENT") %>%
+  arrange(location_x)
+bus79_full <- bus79_full %>%
+  filter(location_x >= -87.741271 & location_x <= -87.539729)
+#66th Street Bus:
+#Chicago/Austin Terminal, 41.899321, -87.774772
+#215 E Chicago Ave (first eastern stop on Chicago), 41.896650, -87.620773
+bus66_full <- chicago_data %>%
+  filter(street == "W Chicago Ave") %>%
+  filter(type != "JAM" & type != "ACCIDENT") %>%
+  arrange(location_x)
+bus66_full <- bus66_full %>%
+  filter(location_x >= -87.774772 & location_x <= -87.620773)
+bus66_79 <- rbind(bus66_full, bus79_full)
+incidents <- table(bus66_79$subtype)
+incidents
+```
+A: The two most prevelant subtypes of issues are pot holes and road closures, so while the second can't be fixed presumably (assuming it's construction or something necessary), the pot holes would certainly slow traffic and could be fixed by road resurfacing. 
+      
+ 
+# Waze single event (20 point)
+
+1.  Revisit the event which caused c5a73cc6-5242-3172-be5a-cf8990d70cb2. 
+
+    a. Define a bounding box around the cause of the event. 
+A:
+
+    * Defined a bounding box with same day and around same location with ± 0.1 for both location_x and location_y(setting buffer equals to 0.1).
+    * And also, filtered only 2017-12-24 datasets to create a bounding box.
+    + location_x: -87.61875 ± 0.1 
+    + location_y: 41.86272 ± 0.1
+    + date: 2017-12-24
+    * This filtering gives 130 observations as an output.
+    
+```{r}
+chicago_data %>%
+  filter(uuid == "c5a73cc6-5242-3172-be5a-cf8990d70cb2")
+
+slakeshore <- 
+  chicago_data %>%
+  filter(street == "S Lake Shore Dr")
+
+slakeshore <- slakeshore %>%
+  mutate(date = as.Date(scrape_dt)) %>%
+  mutate(scrape_dt = ymd_hms(scrape_dt)) %>%
+  mutate(scrape_dt_hour = hour(with_tz(scrape_dt, tzone = "US/Central"))) %>%
+  filter(date == "2017-12-24") 
+```
+
+```{r}
+(bounding_box <- slakeshore %>%
+  filter(location_x >= -87.71875 & location_x <= -87.51875) %>%
+  filter(location_y >= 41.76272 & location_y <= 41.96272) %>%
+  select(contains("scrape_dt"), location_x, location_y, type, uuid, everything()))
+```
+  
+    b. What causes all these jams? Some googling might help.
+A: Weather cause all these jams. If you google, snowfall caused jam on 2017/12/24.
+    
+    c. Plot the number of jams 6AM-6PM CST. Why are there two humps? 
+    
+A: The humidity was the highest(92%) at 11:16am, which means that it snowed the most at 11am time bin. Also, the humidity was second highest (89%) around 2:53~3:53pm. On top of that, there was football game that Chicago Bears won on that day, although it might had very minor effect on the jams, due to the weather. 
+ 
+    d. Place one vertical line at each hump. 
+    
+```{r}
+bounding_box %>%
+  filter(scrape_dt_hour >= 6 & scrape_dt_hour <= 18)%>%
+  ggplot(aes(x = scrape_dt_hour)) +
+  geom_bar() +
+  labs(title = "Number of jams (2017/12/24 6AM-6PM CST)", x = "Hours") +
+  scale_x_continuous(breaks = seq(6, 18, by = 1)) +
+  geom_vline(xintercept=11, color = "red") +
+  geom_vline(xintercept=15, color = "red")
+```
+    
+
+    e. Next, propose a quantitative measure of traffic jam severity that combines 
+    the number of traffic `JAM` alerts with information in the `subtype` variable. 
+
+A: I would like to propose fraction of 'JAM' subtypes to measure the overall jam severity. The proposed fraction is calculated by [# of subtype / (total # of JAM)]*100
+
+```{r}
+measure <- 
+  bounding_box %>%
+  filter(type == "JAM") %>%
+  group_by(type, subtype) %>%
+  count() %>%
+  arrange(desc(n))
+
+measure %>%
+  mutate(fraction = (n / (62+37+16+15))*100)
+```
+    
+    f. Plot this measure from 6AM-6PM CST. Is there any information that is 
+    conveyed by your severity measure that was not captured by plotting the number 
+    of jams? If so, what is it?
+
+A: Yes. By plotting this measure, I could detect the severity, most frequent type of JAM on 2017/12/24 from 6AM-6PM CST, because based on the subtype variable, I can classify jams. JAM_STAND_STILL_TRAFFIC > JAM_HEAVY_TRAFFIC > JAM(without subtype) > JAM_MODERATE_TRAFFIC
+    
+```{r}
+bounding_box %>%
+  filter(type == "JAM") %>%
+  filter(scrape_dt_hour >= 6 & scrape_dt_hour <= 18) %>%
+  group_by(type, subtype) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  mutate(fraction = (n / (62+37+16+15))*100) %>%
+  ggplot(aes(x = subtype, y = fraction)) +
+  geom_bar(stat="identity") +
+  coord_flip()
+```
+    
+    
+# Waze aggregate over multiple events (30 points)
+
+1.  Pick one major accident. What is the uuid? Sample alerts from the two hours 
+    before the accident first appeared in the data and two hours after the accident 
+    for a geographic box of 0.02 miles around the accident. Make a plot where the y-axis
+    is the number of traffic jam alerts and the x-axis is the five-minute interval from 
+    two hours before the accident to two hours after the accident.  Warning:
+    This question is harder than it first appears. You might want to review R4DS chapter 12.5 (lecture note 5) on missing values and chapter 16.4 (lecture note 9). 
+    
+A: uuid for major accident is 637d46be-9830-39a4-b6e7-d5ccee2c806f. Location for x is -87.7011, y is 41.93575. Time the accident first appeared in the data is 2018-03-20 00:00:00. Sample alerts are in the time range 2018-03-19 22:00:00 ~ 2018-03-20 02:00:00
+
+
+```{r}
+# uuid for major accident is 637d46be-9830-39a4-b6e7-d5ccee2c806f
+chicago_data %>%
+  filter(subtype == "ACCIDENT_MAJOR") %>%
+  group_by(uuid) %>%
+  count() %>%
+  arrange(desc(n))
+
+# Time the accident first appeared in the data is 2018-03-20 00:00:00
+chicago_data %>% 
+  filter(uuid == "637d46be-9830-39a4-b6e7-d5ccee2c806f") %>%
+  mutate(time = substr(scrape_dt, 11, 19)) %>%
+  group_by(time) %>%
+  arrange(time) %>%
+  select(scrape_dt, time, uuid, everything())
+
+# Sample alerts with 2 hour before the first accident 
+library(hms)
+before_accd <- 
+  chicago_data %>% 
+  filter(location_x >= -87.7211 & location_x <= -87.6811) %>%
+  filter(location_y >= 41.91575 & location_y <= 41.95575) %>%
+  mutate(date = as.Date(scrape_dt)) %>%
+  mutate(time = substr(scrape_dt, 11, 19)) %>%
+  mutate(time = as.hms(time)) %>%
+  filter(date == "2018-03-19") %>%
+  filter(time >= as.hms("22:00:00"))
+
+# Sample alerts with 2 hour after the first accident   
+after_accd <-
+chicago_data %>% 
+  filter(location_x >= -87.7211 & location_x <= -87.6811) %>%
+  filter(location_y >= 41.91575 & location_y <= 41.95575) %>%
+  mutate(date = as.Date(scrape_dt)) %>%
+  mutate(time = substr(scrape_dt, 11, 19)) %>%
+  mutate(time = as.hms(time)) %>%
+  filter(date == "2018-03-20") %>%
+  filter(time <= as.hms("02:00:00"))
+
+# Sample alerts by binding 2 dataset(before & after the accident)
+alert_sample <- rbind(before_accd, after_accd)
+
+# Plot with 5 min interval
+alert_sample %>%
+  select(scrape_dt, date, time, subtype, everything()) %>%
+  mutate(dt = ymd_hms(scrape_dt)) %>%
+  group_by(dt) %>%
+  count() %>%
+  ggplot(aes(x = dt, y = n)) +
+  geom_line() +
+  labs(title = "# of traffic jam alerts before, after the accident that happened in 18-03-20 00:00:00",
+       x = "5 min interval for 2 hr before and after the accident", 
+       y = "number of traffic jam") + 
+  scale_x_datetime(date_breaks = "5 min", date_labels = "%H:%M") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) 
+
+
+```
+
+
+
+2.  Building on your work for the prior question, write a function that takes as its 
+    arguments `uuid`, a `date-time`, a latitude and a longitude and 
+    returns a data frame with the number of alerts in each five-minute interval 
+    from two hours before to two hours after.
+
+```{r}
+# Function that takes a data frame of alerts, uuid.
+get_accident1 <- 
+  function(uuid) {
+    select(uuid, scrape_dt) %>%
+      mutate(dt = ymd_hms(scrape_dt)) %>%
+      group_by(dt) %>%
+      count() 
+}
+
+get_accident2 <- 
+  function(uuid, scrape_dt) {
+    select(uuid, scrape_dt) %>%
+    mutate(dt = ymd_hms(scrape_dt)) %>%
+  count() 
+}
+
+# filter(dt < dt + 2*60*60 & dt > dt - 2*60*60)
+
+alert_sample %>% 
+  get_accident1()
+```
+
+3.  Make a data frame with every major accident on Nov 20, 2017. 
+    Feed each row of this data frame to your function. Collapse the output into the mean number 
+    of traffic jam alerts in each five-minute interval in the two hours before the 
+    accident and two hours after the accident for a geographic box of 0.1 miles. 
+    Tip: This may take upwards of 20 minutes to run on all major accidents. Use your function on a small sample of accidents first to make sure your code is working as expected before trying to run on all accidents. 
+    
+```{r}
+# data frame with every major accident on 2017-11-20
+nov_20_major_accd <- 
+  chicago_data %>%
+  filter(subtype == "ACCIDENT_MAJOR") %>%
+  mutate(date = as.Date(scrape_dt)) %>%
+  filter(date == "2017-11-20") %>%
+  select(uuid, scrape_dt, everything())
+
+#  Feed each row of this data frame to your function
+for (i in nov_20_major_accd$uuid) {
+  nov_20_major_accd %>%
+    get_accident2(i)
+}
+
+# Collapse the output into the mean number of traffic jam alerts
+nov_20_major_accd %>%
+  get_accident1() %>% 
+  group_by(n) %>%
+  count() %>%
+  mutate(average_jam_alert = (1*61+2*15+3*2+4*4) / (61+15+2+4))
+```
+
+    
+4.  Plot the mean number of jam alerts around major accident. To be clear, the correct
+    answer here is a single plot that summarizes jams across major accidents, not one 
+    plot for each accident. Congratulations! This is your first event study.
+    
+```{r}
+chicago_data %>%
+  filter(subtype == "ACCIDENT_MAJOR") %>%
+  mutate(date = as.Date(scrape_dt)) %>%
+  mutate(time = substr(scrape_dt, 11, 19)) %>%
+  mutate(time = as.hms(time)) %>%
+  select(scrape_dt, date, time, subtype, everything()) %>%
+  mutate(dt = ymd_hms(scrape_dt)) %>%
+  group_by(dt) %>%
+  count() %>%
+  ggplot(aes(x = dt, y = n)) +
+  geom_line() + labs(title = "mean number of jam alerts around major accident")
+```
+    
+    

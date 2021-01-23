@@ -1,0 +1,376 @@
+---
+title: "30535 Skills Problem Set 2"
+author: "Hye-Min Jung"
+date: "4/17/2020"
+output: html_document
+---
+This submission is my work alone and complies with the 30535 integrity policy. **Hye-Min Jung**  
+Collaborators: Boseong Yun  
+Late coins used this pset: 0. Late coins left: 4. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+```
+
+# 2. git concepts  
+1. (1)Committing new changesets can be done locally without anyone else seeing them. Once you have a group of changesets ready, you can push all of them at once. (2) Branching and merging can happen automatically and quickly, (3) developers have the ability to work offline, (4) multiple copies of the software eliminate reliance on a single backup
++ resource : https://scriptcrunch.com/295/
++ resource : https://www.perforce.com/blog/vcs/what-dvcs-anyway
+i. datasci-harris/skills-ps-2-spring-2020-hmjung-cpu  
+ii. Execute `git add<file>` (ex. git add Bob.txt)  
+iii. When you now run `git commit` a text editor will open and allow you to write a message telling everything what you did. When you save and close the message file, your commit is added to the Local Repository.
+iv. If you run `git status`, changes are only in your Working Directory. If you want to see what has changed in your Working Directory you can run `git diff`, and see the changes. 
+v. On master branch. master branch is set by defualt is shown when I restart the github desktop.    
+vi-a. Merely adding a branch don't change files in working directory.  
+vi-b. Branches live in the Local and Remote Repository. When you create a new branch, the branches contents will be a copy of the currently committed state of whatever branch you are currently working on.  
+vi-c. Newly created branch appears under `Current_Branch`  
+vi-d. There needs to be a system in place for managing different versions of the same code base. Branching allows each developer to branch out from the original code base and isolate their work from others. It also helps Git to easily merge versions later on.
++ resource : https://backlog.com/git-tutorial/using-branches/
+
+# 3.1 Debugging mindset  
+1. Why does this code not work?
++ Code does not work due to typo in the 7th chracter. 'i' is not written the same (i ≠ ı). If i is written properly, code does work. print(my_variable) 
+2. Tweak each of the following R commands so that they run correctly:
+```{r}
+library(tidyverse)
+ggplot(data = mpg) + geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+```{r}
+filter(mpg, cyl == 8) 
+filter(diamonds, carat > 3)
+```
+3. Press Alt + Shift + K. What happens? How can you get to the same place using the menus?  
++ It shows Keyboard Shortcut(for Mac Option+Shift+K). [Menu]>[Tools]>[Keyboard Shortcuts Help] gives same result.  
+
+  
+# 3.2 Filter rows with filter()  
+1. Import the nycflights13 library, which comes with a data set called flights. Find all flights that
+```{r}
+library(nycflights13)
+flights <- nycflights13::flights
+```
+1-1. Had an arrival delay of three or more hours
+```{r}
+filter(flights, arr_delay >=3)
+```
+1-2. Flew to Houston (IAH or HOU)
+```{r}
+dest_vector <- c("IAH", "HOU")
+filter(flights, dest %in% dest_vector)
+```
+1-3. Were operated by United, American, or Southwest
+```{r}
+carrier_vector <- c("UA","AA", "WN")
+filter(flights, carrier %in% carrier_vector)
+```
+1-4. Departed in spring (March, April, and May)
+```{r}
+month_vector <- c(3, 4, 5)
+filter(flights, month %in% month_vector)
+```
+1-5. Arrived more than two hours late, but didn’t leave late
+```{r}
+filter(flights, arr_delay >= 120 & dep_delay <= 0)
+```
+1-6. Were delayed by at least an hour, but made up over 30 minutes in flight 
+```{r}
+flights %>%
+  filter(dep_delay >= 60, dep_delay - arr_delay > 30)
+```
+1-7. Departed between midnight and 5am (inclusive)  
+```{r}
+filter(flights, dep_time == 2400 | dep_time <= 500)
+```
+
+2. We reproduced a graph from the last problem set. There is one green point that has very low gas mileage. What car is it?
++ That green point is minivan with very low gas mileage.  
+```{r}
+ggplot(mpg) + 
+  geom_point(mapping = aes(x = displ, y = cty, color = factor(class))) + 
+  geom_smooth(mapping = aes(x = displ, y = cty), se = FALSE)
+```
+  
+  
+3. Common bugs: You want to see missing values in a dataframe. You run the following code and get no results. Why is wrong?
++ This is because, filter() only includes rows where the condition is TRUE. In other words, filter() excludes both FALSE and NA values. So if one wants to preserve missing values, ask for them explicitly: by putting is.na(x) instead of NA.
+```{r}
+filter(flights, is.na(arr_time))
+```
+4. How many flights have a missing dep_time? What other variables are missing? What might these rows represent?
++ 8255 flights have a missing dep_time, as well as dep_delay, arr_time, arr_delay, air_time, and sometimes tailnum. These rows might probably represent cancelled flights due to various reasons.  
+```{r}
+filter(flights, is.na(dep_time))
+```
+5. What happens to observations with missing values in arr_time when you filter by arr_time == 1800? Why? 
++ If you filter for arr_time == 1800, observations of missing value for arr_time is not included in the resulting data frame.
+```{r}
+filter(flights, arr_time == 1800)
+```
+6. What does NA | TRUE evaluate to? Why?
++ TRUE. Here, NA is holding the place of a logical value, so it could be representing only TRUE or FALSE. But whatever it represents, the answer will be the same as TRUE.  
++ cf. OR(|) Only one has to be 'TRUE' for the whole statement to return 'TRUE'  
++ cf. AND(&) Both has to be 'TRUE' for the whole statement to return 'TRUE'  
++ resource : https://blog.revolutionanalytics.com/2016/07/understanding-na-in-r.html  
++ resource : https://github.com/harris-coding-lab/harris-coding-lab.github.io/blob/master/slides/03_if-statements.Rmd
+```{r}
+NA | TRUE
+TRUE | TRUE
+FALSE | TRUE
+```
+7. What does FALSE & NA evaluate to? Why?
++ FALSE. Here, NA is also holding the place of a logical value. Because for AND(&), both has to be 'TRUE' for the whole statement to return 'TRUE', whatever it represents, here the answer will be the same as FALSE. 
+```{r}
+FALSE & NA
+FALSE & TRUE
+FALSE & FALSE
+```
+
+# 3.3 Select columns with select()  
+1. What happens if you include the name of a variable multiple times in a select() call?  
++ R returns only 1 column for each variable included in the select(), regardless of number of times included in the select(). 
+```{r}
+select(flights, carrier, carrier, year, day, day, carrier)
+```
+2. Typically, R is case-sensitive, but select helpers ignore case by default. Change the default to return an empty tibble.
++ If ignore.case = TRUE(default) changed to False, then it ignores case when matching names.
+```{r}
+select(flights, contains(ignore.case = FALSE, "TIME"))
+```
+3. Brainstorm as many distinct ways as possible to select dep_time, dep_delay, arr_time, arr_delay from flights.
+```{r}
+#1
+select(flights, starts_with("dep_time"), contains("dep_delay"), starts_with("arr"), contains("arr_dely"))
+#2
+select(flights, starts_with("dep"), starts_with("arr"))
+#3
+contain_vector1 <- c("dep")
+contain_vector2 <- c("arr_")
+select(flights, contains(contain_vector1), contains(contain_vector2), -contains("sched"))
+#4
+select(flights, starts_with("dep"), contains("dep"), starts_with("arr_"), contains("arr_"), -contains("sched"))
+
+#5
+select(flights, dep_time:dep_delay, arr_time:arr_delay, -contains("sched"))
+```
+
+# 3.4 Sort columns with arrange()  
+1. Sort flights to find the most delayed flights by arrival time. End your code with %>% head(1) to only print that row.
+```{r}
+not_cancelled <- filter(flights, !is.na(arr_time), !is.na(sched_arr_time))
+not_cancelled %>%
+  arrange(desc(arr_delay)) %>%
+  select(arr_delay, everything()) %>%
+  head(1)
+```
+2. Find the top 5 flights that left earliest relative to their scheduled departure. Only show the tail number, date and number of minutes early they departed at.
+```{r}
+not_cancelled <- filter(flights, !is.na(arr_time), !is.na(sched_arr_time))
+not_cancelled %>%
+  arrange(dep_delay) %>%
+  select(tailnum, day, dep_delay) %>%
+  head(5)
+```
+3. How could you use arrange() to sort all missing values to the start? (Hint: use is.na()).
+```{r}
+tail(is.na(flights)) #looking for missing value containing columns
+
+(flights_discard <- flights %>%
+  arrange(desc(is.na(dep_time)),
+          desc(is.na(dep_delay)),
+          desc(is.na(arr_time)), 
+          desc(is.na(arr_delay)),
+          desc(is.na(tailnum)),
+          desc(is.na(air_time))))
+```
+
+# 3.5 Add new variables with mutate()  
+1. Currently dep_time and arr_time are convenient to look at, but hard to compute with because they’re not really continuous numbers. Convert them to number of minutes since midnight in new vars called *_time_min, where * here is variable and could be dep or arr.
+```{r}
+not_cancelled <- filter(flights, !is.na(dep_time), !is.na(dep_delay), !is.na(arr_time), !is.na(dep_delay), !is.na(sched_arr_time), !is.na(air_time))
+
+flights <- mutate(not_cancelled,
+       dep_time_min = (dep_time %/% 100)*60 + dep_time %% 100,
+       arr_time_min = (arr_time %/% 100)*60 + arr_time %% 100,
+       diff = arr_time_min - dep_time_min,
+       diff_diff = diff - air_time)
+
+```
+2. Make a plot to compare air_time with arr_time_min - dep_time_min.
+```{r}
+not_cancelled <- not_cancelled %>%
+  mutate(dep_time_min = (dep_time %/% 100)*60 + dep_time %% 100,
+       arr_time_min = (arr_time %/% 100)*60 + arr_time %% 100,
+       diff = arr_time_min - dep_time_min,
+       diff_diff = diff - air_time) %>%
+  select(arr_time_min, dep_time_min, diff, air_time, diff_diff, everything())
+```
+
+```{r}
+ggplot(data=not_cancelled) + geom_bar(mapping = aes(x = diff_diff)) + labs(title = "hist diff_diff {(arr_time_min - dep_time_min) - air_time}")
+```
+  
+3. We expect `air_time` and `arr_time_min - dep_time_min` to be the same, but they’re not. Why not?
+Identify a major data issue and subtle one.
++ Major issue : (1) Some of the results of `arr_time_min - dep_time_min` are largely negative numbers. This comes from the cases where, flight depart before midnight but arrives after midnight.
++ Subtle issue : (2) I suspect that some of data could have possibly recorded with some errors due to measurement differences. For instance, `air_time` only measures the duration in the sky, whereas `arr_time` has some time included such as driving time after landing. For example, if you look at the observation #180085(2013/9/28 by AA1256 N3BGAA, LGA to MIA both in East time zone), `air_time` is 138(2 hr 18min) where as `dep_time` 1200, `arr_time` 1518(which should have been 1418 because they are in the same time zone). 
++ Subtle issue : (3) `arr_time` and `dep_time` are recorded in local time zones. So subtracting them does not give an accurate measure of `air_time` except in the case where the destination is also in East time zone(GMT-4). 
+```{r}
+#Major issue(1) 10536 observations with which arr_time < dep_time; which departed before midnight but arrives after midnight, resulting negative difference.
+not_cancelled %>% 
+  filter(arr_time_min < dep_time_min)
+  #diff(arr_time_min - dep_time_min) summary statistics
+    not_cancelled %>% 
+   filter(arr_time_min < dep_time_min) %>%
+   summarise(mean = mean(diff), #-1269.969	
+             min = min(diff), #-1401	
+             median = median(diff), #-1268	
+            max = max(diff), #-1041	
+            sd = sd(diff)) #59.28218
+
+not_cancelled %>% filter(dest == "MIA") #Subtle issue(2)NYC to Miami suggests that there some measurement differences between air_time and and 'arr_time_min - dep_time_min'. This could possibly the time difference coming from driving time after landing on the airport. 
+```
+4. Implement your fix to the major probelm. Remake the plot from the previous question.
++ I am adding 1440(24*60) to arr_time_min with observations that are `arr_time_min < dep_time_min` to adjust for the major problem arose by midnight minute counting. With this adjustment, plot looks better in terms of extreme difference that existed in the original plot.
+
+```{r}
+not_cancelled <- not_cancelled %>%
+  mutate(new_arr_time_min = ifelse((arr_time_min < dep_time_min), arr_time_min + 24*60, arr_time_min)) %>%
+  select(new_arr_time_min, everything()) %>%
+  mutate(new_diff = new_arr_time_min - dep_time_min,
+         new_diff_diff = new_diff - air_time)
+```
+```{r}
+ggplot(not_cancelled) + geom_bar(mapping = aes(x = new_diff_diff)) + labs(title = "hist new_diff_diff {(new_arr_time_min - dep_time_min) - air_time}") + scale_x_continuous(breaks=seq(-480, 120, by = 60))
+```
+
+5. Suggest and justify with words an error tolerance in minutes, meaning that if air_time is too far off from arr_time - dep_time then we assume one of the columns contains an error. After implementing your fix, what fraction of observations still appear to have an error?
++ I suggest error tolerance as  ±360min(6hrs), as with addition of 1440(12*60), the midnight minute counting is expected to be adjusted.  
++ Here, I suggest tolerance error of ±360min, because second biggest problem might be coming from the time zone difference. Accounting for the time zone difference with farthest destination HNL(with distance 4983) from NY which has 6 hour time difference, all the difference should fit under this  ±360min. 
++ With this threshold, 0% appears to have an error. filter(not_cancelled, new_diff_diff < -360 & new_diff_diff > 360)
++ cf. After accoungting for  ±360min, only remaining difference error would be time measurement error by arising from extra time after landing recorded as arr_time etc.  
+```{r}
+(filter(not_cancelled, new_diff_diff < -360 & new_diff_diff > 360)) #0% have an error. 
+```
+6. Find the 10 most delayed flights using a ranking function. How do you want to handle ties? Carefully read the documentation for min_rank().
+```{r}
+#Ties gets the smallest rank this code
+head(arrange(flights,desc(min_rank(flights$dep_delay))), 10)
+```
+
+# 3.6 Summarizing grouped data  
+
+1. In lecture, we defined a not_cancelled data frame. Come up with another approach that will give you the same output as not_cancelled %>% count(dest) and not_cancelled %>% count(tailnum, wt = distance) (without using count()).
+```{r}
+not_cancelled <- filter(flights, !is.na(dep_delay), !is.na(arr_delay))
+not_cancelled %>% count(dest)
+#alternative approach
+not_cancelled %>%
+  group_by(dest) %>%
+  summarise(n = n())
+
+not_cancelled %>% count(tailnum, wt = distance)
+#alternative approach
+not_cancelled %>%
+  group_by(tailnum) %>%
+  summarise(n = sum(distance))
+```
+2. Calculate average delays by destination for flights originating in NYC. Create a variable which ranks destinations from worst to best, where 1 is the worst rank.
++ I calculated average delays by destination with arr_delay. Because we want look at the case for the destination's delayed time and arrival delay matters for the destination rather than destination delay.
+```{r}
+by_destination <- 
+  not_cancelled %>%
+  group_by(dest) %>%
+  summarise(delay = mean(arr_delay, na.rm = TRUE)) %>%
+  arrange(desc(delay))
+by_destination
+```
+3. What hour of the day should you fly if you want to avoid arrival delays as much as possible?
++ Analyzing by time of scheduled departure(hour), flying approximately at 7 can avoid arrival delay as much as possible. Because on average plane scheduled to depart at approximately 7 arrives earlier than the schedule.
+```{r}
+by_hour <-
+  not_cancelled %>%
+  group_by(hour) %>%
+  summarise(delay = mean(arr_delay, na.rm = TRUE)) %>%
+  arrange(delay)
+by_hour
+```
+4. Which plane (tailnum) has the most minutes of delays total?
++ N15910 has the 15075 minutes of delay, which ranks the first most minutes of total delays.
+```{r}
+by_tail <- 
+  not_cancelled %>%
+  group_by(tailnum) %>%
+  summarise(total_delay = sum(dep_delay, arr_delay, na.rm = TRUE)) %>%
+  arrange(desc(total_delay))
+by_tail
+```
+5. Find all destinations that are flown by at least three carriers. Order the results from most carriers to fewest.
++ Below lists are 52 destinations that are flown by at least 3 carriers in descending order.
+```{r}
+not_cancelled %>% 
+  group_by(dest) %>% 
+  summarise(carriers = n_distinct(carrier)) %>% 
+  arrange(desc(carriers)) %>%
+  filter(carriers >= 3)
+```
+6. Calculate the number of non-cancelled flights by each carrier. Report the results in table in reverse alphabetical order with the min() and max() distance each airline covers.
+```{r}
+by_carrier <-
+  not_cancelled %>%
+  group_by(carrier) %>%
+  summarise(
+    min = min(distance),
+    max = max(distance)) %>%
+  arrange(desc(carrier))
+
+by_carrier
+```
+7. Which airlines only offer flights from New York to one other airport?
++ AS, F9, HA are the airlines that only offer flights from New York to one other airport.
+```{r}
+by_airlines <- 
+  not_cancelled %>%
+  group_by(carrier, dest) %>%
+  summarise(count = n()) %>%
+  group_by(carrier) %>%
+  summarise(count = n()) %>%
+  filter(count <= 1) 
+
+by_airlines
+```
+
+# 3.7 Practical application  
+1. We posit that arrival delays are more important than departure delays from a passanger’s perspective. We are interested in determining what airlines to avoid based on their delay characteristics.
+a. Calculate the median arrival delay by airline.
+```{r}
+not_cancelled %>%
+  group_by(carrier) %>%
+  summarise(
+    median_arr_delay = quantile(arr_delay, 0.5)
+  )
+```
+b. ExpressJet has a median arrival delay of -1 minutes while US Airways has a median arrival delay of -6 minutes. Does this tell you that US Airways is a more reliable airline? Why or why not?
++ We can't tell reliability from median. Median represents 50th quantile(the middle of distribution). It tells extremely restricted information, in which we have no additional information to figure out about the arrival delay that are not in the middle. 
+c. Median arrival delay may not be the best metric for our needs. Brainstorm at least 4 additional ways to assess the typical delay characteristics of a group of flights.
++ Skewness of the distribution: assess the overall tendency to be on time/late/early
++ Standard deviation: assess the dispersion of the arrival delay from the middle.
++ Conditional mean to see the average of certain delay range
++ quantile to compare the ranks of 25th, 50th, 70th delays
+d. Write the dplyr code which calculates your delay measures separately by airline. Do particular airlines perform poorly on multiple metrics?
+```{r}
+not_cancelled %>%
+  group_by(carrier) %>%
+  summarise(
+    median_delay = median(arr_delay),
+    sd_arr_delay = mad(arr_delay),
+    mean_delay = mean(arr_delay),
+    iqr_delay = IQR(arr_delay),
+    mad_delay = mad(arr_delay)
+  )
+```

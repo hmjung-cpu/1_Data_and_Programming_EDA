@@ -1,0 +1,624 @@
+---
+title: "Applied_ps_1"
+author: "Xiling Zhu, Hye-Min Jung"
+date: "19/04/2020"
+output:
+  html_document:
+    number_sections: yes
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = FALSE)
+```
+
+```{r}
+pkg_list <- c("tidyverse", "ggplot2", "dplyr", "testthat", "styler")
+lapply(pkg_list, require, character.only = TRUE)
+```
+
+<!-- .Rmd files use  markdown, a text mark up language, to provide formatting.--> 
+<!--Text include within these strange arrows are comments and will not show up when you knit-->
+
+> Front matter
+
+This submission is my work alone and complies with the 30535 integrity policy.
+
+Add your initials to indicate your agreement: **XZ**, **HJ**
+
+Add your collaborators: **__**
+
+Late coins used this pset: 0. Late coins left: 4. 
+
+This is a group work of Hye-Min Jung and Xiling Zhu. Because we worked in parallel and compared outcomes, it would be most convenient to pull from only one branch instead of two. 
+<!--You may use up to two for a given assignment.)-->
+
+# Git merge conflicts
+
+1. Succinctly explain, why did you have a merge conflict?
+
+    Merge conflicts occur when two or more people changed the same lines in a file, or when one deleted a file while another was still working on it. 
+
+# Flight Data: Part I
+
+## Download BTS Data
+```{r}
+# Load monthly datasets and bind them to create a new dataframe `il_flights`
+# Modified from https://stackoverflow.com/a/40943207
+il_flights <-
+    list.files(path = "datasets",
+               pattern = "*.csv", 
+               full.names = TRUE) %>% 
+    map_df(~read_csv(., col_types = cols(.default = "c"))) 
+
+# Delete missing column named `X24`
+il_flights$X24 <-  NULL
+
+# Now we clean the variable names.
+
+# First, change upper case variables to lower case. Modified from https://stackoverflow.com/a/13258180
+names(il_flights)[c(1, 2, 7, 10, 13, 14, 16, 17, 19:23)] <- tolower(names(il_flights)[c(1, 2, 7, 10, 13, 14, 16, 17, 19:23)]) 
+
+# Next, condense long or unclear variable names 
+il_flights <- il_flights %>% 
+  rename(day = DAY_OF_MONTH)%>% 
+  rename(date = FL_DATE) %>% 
+  rename(carrier = OP_CARRIER) %>% 
+  rename(flight = OP_CARRIER_FL_NUM) %>% 
+  rename(origin_city = ORIGIN_CITY_NAME) %>% 
+  rename(origin_state = ORIGIN_STATE_NM) %>% 
+  rename(dest_city = DEST_CITY_NAME) %>% 
+  rename(dest_state = DEST_STATE_NM) %>% 
+  rename(dep_delay_min = DEP_DELAY_NEW) %>% 
+  rename(arr_delay_min = ARR_DELAY_NEW) 
+
+# Finally, change data types from `character` to `numeric`
+il_flights <- transform(
+  il_flights, 
+    arr_delay = as.numeric(arr_delay), 
+    dep_delay = as.numeric(dep_delay),
+    arr_delay_min = as.numeric(arr_delay_min), 
+    dep_delay_min = as.numeric(dep_delay_min),
+    month = as.numeric(month)
+  )
+```
+
+## Data Description
+
+1. What is the unique identifier for each flight in the dataset?
+
+    The new `id` variable is the unique identifier for each flight in this dataset. 
+    
+```{r}
+il_flights <- il_flights %>% 
+  mutate(id = paste0(month, day, flight)) 
+```
+
+
+2. R has six description methods: `print`, `head`, `str`, `glimpse`, `View`, `summary`. Apply them to `il_flights`
+
+    Are any of the methods redundant, in the sense that you don’t learn anything about the data from these commands that you didn’t already know from the prior methods? Make a list of the non-redundant methods (giving preference to the command with prettier output).
+
+    `print` and `view` is redundant. The differences between `view` (`print`) and `head` are : 1) `view` or `print` present a full dataset, while `head` only presents the first 6 rows by default. However,  rows after the first 6 is redundant for the analyst in the sense that he/she cannot process the information in those 675,822 rows; 2) In calling `head`, we are missing the size of the table and the column types, while `view` shows us the size, and `print` shows us both the size of the table and the column typse. But  the table size and column types can be obtained from `str` or `glimpse` in a much faster way.
+
+    `glimpse` is also redundant. `glimpse` is like `str` but it it tries to show you as much data as possible (https://tibble.tidyverse.org/reference/glimpse.html). However, an analyst is not able to process those entries just by "glimpsing" them. `glimpse` is redundant in the sense that data shown by calling `glimpse` but not by `str` does not provide new information that can be processed by the analyast. 
+
+    List of non-redundant methods (prettier output are listed first)
+
+    * `head`
+    * `str`
+    * `summary`
+    
+    Of the non-redundant methods, write a note (max 2 lines per command) that will quickly help someone (perhaps future you!) recall how each command is useful.
+
+    | method    |      | useful when:                                                 |
+    | --------- | ---- | ------------------------------------------------------------ |
+    | `head`    |      | you want the first few rows of a data frame in an intuitive format, without too much details on the table size and column types |
+    | `str`     |      | you need to know the table size and column types, and you do not mind "variable names in the first column" presentation |
+    | `summary` |      | summary statistics of each variable is of interest to you    |
+
+```{r}
+#print(il_flights)
+
+head(il_flights)
+
+str(il_flights)
+
+glimpse(il_flights)
+
+#view(il_flights)
+
+summary(il_flights)
+```
+        
+## Data Validation
+
+1. You should have 675822 rows when you downloaded data for Illinois. Load the package testthat and then test that you have this many rows using the command `test_that("we have the right number of rows",expect_equal(nrow(data),675822))`
+
+```{r}
+test_that("we have the right number of rows",expect_equal(nrow(il_flights), 675822))
+```
+
+2. Because of the conditions you put into the webform, all flights should be to or from Illinois airports. Let’s check this.
+
+```{r}
+il_flights %>% 
+  filter(origin_state != "Illinois" & dest_state != "Illinois" ) %>% 
+  nrow()
+```
+
+3. Drop flights to and from Midway and O’Hare. How many flights are left?
+
+    12240 flights are left.
+```{r}
+# Create a list for Chicago airports
+chi_airports <- c("ORD", "MDW") 
+
+# Create a new operator %in%, as the opposite of %in%. Based on https://stackoverflow.com/a/46867726
+"%ni%" <- Negate("%in%")
+
+# Drop flights to and from Midway and O'Hare
+il_flights %>% 
+  filter(origin %ni% chi_airports & dest %ni% chi_airports) %>% 
+  nrow()
+```
+
+4. Among flights whose origin or destination is not Midway or O’Hare, what are the five most common origins? What are the five most common destinations? Where are these cities? Are these origins and destinations inside or outside Illinois? Can you explain why these are the most common origins and destinations?
+
+   1. Most common origins and cities
+
+      | Origin | City                   | Number of Flights|
+      | ------ | ---------------------- |  ---------------------- |
+      | ATL    | Atlanta, GA            |2966|
+      | PIA    | Peoria, IL             |2001|
+      | MLI    | Moline, IL             |1984|
+      | BMI    | Bloomington/Normal, IL |1517	|
+      | DTW    | Detroit, MI            |1233|
+
+   2. Most common destination and cities
+
+      | Destination | City                   | Number of Flights |
+      | ----------- | ---------------------- | ----------------- |
+      | ATL         | Atlanta, GA            | 2968              |
+      | PIA         | Peoria, IL             | 1999              |
+      | MLI         | Moline, IL             | 1926              |
+      | BMI         | Bloomington/Normal, IL | 1517              |
+      | DTW         | Detroit, MI            | 1228              |
+
+   3. Are these origins and destinations inside or outside Illinois?
+
+      ATL and DTW are outside Illinois, and PIA, MLI, and BMI are inside Illinois.
+
+   4. Can you explain why these are the most common origins and destinations?
+   
+      Hartsfield-Jackson Atlanta International Airport (ATL), [the world's busiest airport](http://www.bbc.com/travel/story/20130207-why-is-atlanta-the-worlds-busiest-airport), is naturally in the list of most common origins and destinations. It's home to one of the world's largest airline, Delta Air Lines; Atalanta is a major port of entry into the US and a stopover for domestic travels; it's also a popular destination for business visitors since it is home to the headquarters of [10 Fortune 500 companies](http://money.cnn.com/magazines/fortune/fortune500/2011/cities/) 
+   
+      Detroit Metropolitan Airport (DTW) is Delta Air Lines' second-largest hub only after ATL. DTW is a major connecting point between the East and the West.  
+   
+      Quad City International Airport (MLI), General Wayne A. Downing, Peoria International Airport (PIA), and Central Illinois Regional Airport at Bloomington-Normal (BMI), though non-hub airports, are three of the most common origins and destinations because of the spillover from Chicago. They are in the "right" distance from O'Hare and Midway airports, neither too close nor too far. If they were closer to Chicago, people who need to travel to/ from Chicago might choose other transportionas, for example, buses or trains. If they were further away from Chicago, the spillover effect from Chicago is not significant. And instead of non-hub airports, people might choose larger airports nearby (e.g. St. Louis Lambert Airport), because the ticket prices are usually cheaper and there are many more options to travel from/to a hub airport .   
+
+  ![](supporting documents/illinois-airports.gif)
+  
+  Source: [llinois Airports Map, Maps of World](https://www.mapsofworld.com/usa/states/illinois/illinois-airports.html)
+  
+    
+```{r}
+# Created a new data frame `outside_chi` exclusively for flights whose origins and destinations are not Chicago.
+outside_chi <- il_flights %>% 
+  filter(origin %ni% chi_airports & dest %ni% chi_airports) 
+
+# Find five most common origins outside Chicago.
+outside_chi_origin <- outside_chi %>% 
+  group_by(origin) %>% 
+  summarise(n_origin = n()) %>% 
+  arrange(desc(n_origin)) %>% 
+  head(5) 
+
+outside_chi_origin <- as.list(outside_chi_origin$origin) # Create a list for %in% operator
+
+outside_chi %>% 
+  filter(origin %in% outside_chi_origin) %>% 
+  select(origin, origin_city) %>% 
+  distinct(origin, origin_city)
+
+# Find most common destinations outside Chicago.
+outside_chi_dest <- outside_chi %>% 
+  group_by(dest) %>% 
+  summarise(n_dest = n()) %>% 
+  arrange(desc(n_dest)) %>% 
+  head(5) 
+  
+outside_chi_dest <- as.list(outside_chi_dest$dest) # Create a list for %in% operator
+
+outside_chi %>% 
+  filter(dest %in% outside_chi_dest) %>% 
+  select(dest, dest_city) %>% 
+  distinct(dest, dest_city)
+
+```
+
+5. Next, limit the sample to flights to or from Midway and O’Hare. How many rows do you think the dataset should have, approximately? Find at least two websites that estimate the number of flights into and out of each airport. Do these estimates agree with what is in the BTS dataset? Do these estimates agree with each other? If they disagree, why do you think they disagree?
+    
+    There are 663582 rows in the dataset `chi_flights`, which contains the flights to or from ORD and MDW
+    
+    * ORD
+        
+        Webstie 1 [Chicago O'Hare Airport (ORD)](https://www.airport-ohare.com/) says "O'Hare Airport serves an approximate average of 2,400 aircraft operations per day." Then in 2016 the estimated number of flights in ORD should be `2400*366 = 878400`. However, the website also indicates that "in 2017, ORD airport handled 79.8 million passengers[^1]." Given the fact that [Boeing 737-800 was the most popular aircraft in US commercial aircraft fleets(http://www.fi-aeroweb.com/US-Commercial-Aircraft-Fleet.html) with a capacity of [162 passengers](https://en.wikipedia.org/wiki/Boeing_737_Next_Generation), the estimated number of passenger flights in ORD is `79800000/162 = 492593` 
+        
+        [^1]: The website says "79,8 million" instead of "79.8", which seems to be an error in data entry. Since "79,8 million" should be "798 million" by conventional formatting.  
+        
+        Website 2[Wikipedia O'Hare International Airport](https://en.wikipedia.org/wiki/O%27Hare_International_Airport#Annual_traffic): The annual aircraft operations in 2016 is 867,635, and passenger volume is 77,960,588. Given the fact that [the Boeing 737-800 was the most popular aircraft for US commercial fleets](http://www.fi-aeroweb.com/US-Commercial-Aircraft-Fleet.html) with a capacity of [162 passengers](https://en.wikipedia.org/wiki/Boeing_737_Next_Generation), the estimated number of flights in ORD is `77960588/162 = 481238`  
+        
+        
+    * MDW
+    
+       Website 1 [Chicago Midway Airport](https://www.midway-airport.com/):  "Chicago Midway International Airport handled 22,027,737 passengers in 2018." Given the fact that [the Boeing 737-800 was the most popular aircraft for US commercial fleets](http://www.fi-aeroweb.com/US-Commercial-Aircraft-Fleet.html) with a capacity of [162 passengers](https://en.wikipedia.org/wiki/Boeing_737_Next_Generation), the estimated number of flights in MDW is `22,027,737/162 = 135974`. 
+       
+       Website 2 [Wikipedia Midway International Airport](https://en.wikipedia.org/wiki/Midway_International_Airport#Annual_traffic): In 2016, the annual pasenger traffic is 22,677,589. Given the fact that Boeing 737 is [one of the most popular model for passenger flights](https://www.nytimes.com/interactive/2019/03/15/business/boeing-737-max-popularity.html), and Boeing 737-800, which seats [162 passengers](https://www.boeing.com/commercial/737ng/), is 737's [most popular variant](http://www.fi-aeroweb.com/US-Commercial-Aircraft-Fleet.html), the number of passenger flights at MDW in 2016 is estimated to be `22,677,589/162 = 139985`
+       
+       
+| Source                                 | ORD Aircraft Operations | ORD Passenger Flights | MDW Aircraft Operations | MDW Passenger Flights | ORD Passenger Volume | MDW Passenger Volume |
+| :------------------------------------- | ----------------------- | --------------------- | ----------------------- | --------------------- | ----------------------- | ----------------------- |
+| Website 1 (Airports guides) | 878, 400                | 492, 593              | NA                      | 135,974               | 79.8 million | 22,027,737 |
+| Website 2 (Wikipedia)                  | 867,635                 | 481, 238              | NA                      | 139, 985              | 77,960,588 |  22,677,589|
+| BTS data                               |             NA by assumption            | 487, 971              | NA by assumption | 175, 611 | NA | NA            |
+
+Assuming the BTS dataset only records information for passenger flights, the estimates from the other 2 websites agree with the BTS dataset. Errors arise from using passenger volume to estimate number of passenger flights, which causes the minor difference. 
+    
+Data from the two other websites also agree with each other. Excluding the columns of ORD Passenger Flights and MDW Passenger Flights, which were estimated by us, the number of aircraft operations and passenger volumes are very close. Website 1 (Guides to ORD and MDW) only presents daily average or annual numbers in years other than 2016, while Website 2 (Wikipedia pages for ORD and MDW) presents annual numbers in 2016, which can explain the differences in those numbers. 
+    
+The errors could also be explained by different counting methods. For example, one source might count the number of scheduled enplaned revenue passengers, excluding through passengers and non-revenue passengers, while the other source may include them.
+
+```{r}
+# Limit the sample to flights to or from Midway and O'Hare
+chi_flights <- il_flights %>% 
+  filter(origin %in% chi_airports | dest %in% chi_airports)
+
+nrow(chi_flights)
+
+# Flights to or from Midway
+mdw_flights <- chi_flights %>% 
+  filter(origin == "MDW" | dest == "MDW") %>% 
+  count()
+
+mdw_flights
+
+# Flights to or from O'Hare
+ord_flights <- chi_flights %>% 
+  filter(origin == "ORD" | dest == "ORD") %>% 
+  count()
+
+ord_flights
+
+```
+    
+
+6 Google to figure out the three highest-volume airlines, defined as number of flights leaving or arriving at an airport, at O’Hare and at Midway. Does this agree with what you find in the BTS data? If they disagree, why do you think they disagree?
+
+The three highest-volume airlines in ORD and MDW are Southwest (WN), United (UA), and American (AA). The airline with higher volume is listed first. The data agrees with that in BTS data.
+
+[Carrier shares for January - December 2016](https://www.transtats.bts.gov/airports.asp?pn=1)
+    
+| Carrier	|  Passengers(k)  |	Share  |
+|   --------|     --------|  --------|
+|Southwest	|20,362	|0.313006318|
+|United	|19,460	|0.299140701|
+|American	|16,616	|0.255422502|
+|Other	|13,407	|0.206093493|
+|Envoy Air	|6,579	|0.101132922|
+|SkyWest	|4,136	|0.06357324|
+|ExpressJet	|3,400	|0.052266767|
+|Delta	|504	|0.007747529|
+|Endeavor	|49.52	|0.000761225|
+    
+```{r}
+chi_flights %>% 
+  group_by(carrier) %>% 
+  summarise(carrier_volume = n()) %>% 
+  arrange(desc(carrier_volume)) %>% 
+  head(3)
+```
+
+# Flight Data: Part II: When should they Mayor’s tourism office host their convention?
+
+*Use the same data which you analyzed above. Limit the sample to flights to Midway and O’Hare.*
+
+```{r}
+# Further limit the sample to flights To Midway and O'Hare.
+into_chi_flights <- il_flights %>% 
+  filter(dest %in% chi_airports)
+```
+
+
+*For each question, please follow the four-part approach laid out in lecture. I have given you the question (step 1). You should write out your query (step 2), show the plot from this query (step 3), and write out the answer to the question in a sentence (step 4).*
+
+## Choose a month
+
+1. When are average arrival delays into Chicago (measured using the arrival delay variable) the lowest? When are at least 80% of flights on-time? Make a single plot that answers both questions and write a sentence (or two) that answers these questions.
+
+    Average arrival delays into Chicago are lowest in January, October, and November, and there was not a time in 2016 when 80% of flights into Chicago are on-time.
+    
+```{r}
+# Calculate average arrival delay by month
+  into_chi_flights_avg <- into_chi_flights %>% 
+  group_by(month) %>% 
+  summarize(avg_arr_delay = mean(arr_delay, na.rm = TRUE)) 
+
+# Calculate proportion of on-time flights by month
+into_chi_flights_prop <- into_chi_flights%>% 
+  group_by(month) %>% 
+  summarise(prop_on_time = mean(arr_delay < 0, na.rm = TRUE))
+
+# Combine the two calculations into one dataframe, for a concise ggplot code in the next chunk
+into_chi_delay <- 
+  full_join(into_chi_flights_avg, into_chi_flights_prop)
+
+```
+
+```{r Plot 3.1.1 avg arr delay and ontime prop}
+# Modified from https://www.r-graph-gallery.com/line-chart-dual-Y-axis-ggplot2.html
+
+# Setting two different colors for two `geom()` layers. On-time roportion would be in blue, and average delay would be in red.
+prop_color <- "steelblue4"
+avg_color <- "firebrick"
+
+# Plot
+ggplot(data = into_chi_delay, aes(x = factor(month))) + # Factorize month for a more informative x-axis
+  
+  geom_line(
+    aes(y = avg_arr_delay/15), 
+    group = 1, 
+    col = avg_color, 
+    size = 2
+    ) + # First layer for average delay
+  
+  geom_col(
+    aes(y = prop_on_time), 
+    alpha = 0.4, 
+    fill = prop_color, 
+    width = 0.5
+    ) + # Second layer for on-time proportion
+  
+  geom_hline(yintercept = 0.8, linetype = "dotted", col = prop_color) + # Reference line of 80%
+  
+  annotate(
+    geom = "text", 
+    x = 3, 
+    y = 0.85, 
+    label = "Proportion of flights on-time = 80%", col = prop_color
+    ) + # Label the reference line
+  
+  scale_y_continuous( 
+    name = "Proportion of flights on time", # Specify names for the first y-axis
+    sec.axis = sec_axis(~.*15, name="Average arrival delay (Minute)") # Add and name the second y-axis 
+    ) +  
+  
+  scale_x_discrete(name = "Month") + # Name the x-axis
+  
+  labs(
+    title = "On-time proportion and average arrival delay by month",
+        caption = "Data source: Bureau of Transportation Statistics"
+  )+
+  
+  theme(
+    axis.title.y  = element_text(color = prop_color, size=13),
+    axis.title.y.right = element_text(color = avg_color, size=13),
+  ) 
+```
+
+2. When are flights to Chicago most common? Make a plot to support your answer and write a sentence to answer the question.
+
+    Flights to Chicago are most common in the Summer(June, July, and August). 
+    
+```{r}
+into_chi_flights %>% 
+  group_by(month) %>% 
+  count() %>% # Count the number of flights by month
+  
+  ggplot(aes(x= reorder(month, n), y = n)) + # Reorder months so the one with most flights is displayed first
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip(ylim = c(20000, 30000)) + # Trim the flipped y-axis to make the differences stand out 
+  labs( 
+    x = "Month",
+    y = "Number of flights",
+    title = "Number of flights by month",
+    caption = "Data source: Bureau of Transportation Statistics") 
+```
+
+3. What month do you recommend they have the convention and why? Consider both the number of flights to Chicago and that the tourism board would like attendees to arrive in Chicago on-time. Write a few sentences.
+
+    I would recommend they have the convention in October. In October, 70% of flights into Chicago arrive on time, and the average arrival delay was -0.8 minutes, meaning that in October, on average, flights into Chicago arrive earlier than scheduled. As to the number of flights, there are 29023 flights in to Chicago in October, making it one of the top five months in terms of the number of flights into Chicago.
+
+```{r}
+# Calculate the number of flights by month
+into_chi_flights_num <- into_chi_flights %>% 
+  group_by(month) %>% 
+  summarize(num_of_flights = n())
+
+# Combine average arrival delay, on-time proportion, and number of flights to score the month 
+into_chi_flights_rank <- full_join(into_chi_delay, into_chi_flights_num) 
+
+# The score of each month, in terms of number of flights and arrival delay, is calculated as ( number of flights/10000 - average arrival delay minutes), so that the two terms are roughly in the same range and one does not outweigh the other.
+into_chi_flights_rank <- into_chi_flights_rank %>%  
+  mutate(score = (num_of_flights / 10000 - avg_arr_delay)) 
+
+# Pick and display the best month
+best_month <- top_n(into_chi_flights_rank, 1)
+print(best_month)
+
+```
+
+a. In lecture, we covered the idea of “basic” plots and “sophisticated” plots. Make a “basic” plot which provides the minimal amount of information needed to support your written recommendation.
+    
+```{r}
+into_chi_flights %>% 
+  group_by(month) %>% 
+  mutate(ontime = (arr_delay_min == 0)) %>% # Create a logical variable `ontime` for the `fill` aes
+  
+  ggplot() +
+  geom_bar(
+    aes(x = factor(month), fill = ontime), 
+    position = "stack") + # A layer for on-time proportion wrt. total number of flights
+  
+  scale_x_discrete() + # Name the x-axis
+  
+  labs(
+    x = "Month",
+    y = "Number of flights",
+    title = "Best Month for Convention",
+    subtitle = "On-time ratio by month",           
+    caption = "Data source: Bureau of Transportation Statistics"
+  ) + 
+  
+  scale_fill_discrete(name = "On-time flights", labels = c("Delay", "On-time", "Canceled")) # Rename the legend
+  
+```
+    
+    
+b. Make a “sophisticated” plot that contains more information about flight delays. What are the sub-messages in the “sophisticated” plots that are not in the “basic” plot? If you could submit only one of the two plots to the mayor’s office, which would you submit and why?
+    
+    An observation with `NA` for `arr_delay` is considered as a canceled flight. 
+    
+    The sub-messages in the "sophisticated" plot is the average arrival delay minutes. I would submit the "sophisticated" plot to the mayor's office. Because it also shows the average arrival delay minutes, which visualizes the severity of arrival delay, beyond the simple proportion of delayed flights. If, for some reason, the convention has to be held in the summer, the mayor's office can choose between June or August and avoid July, based on the severity of arrival delay.
+    
+```{r Best month sophisticated plot}
+
+into_chi_flights %>% 
+  group_by(month) %>% 
+  mutate(ontime = (arr_delay_min == 0)) %>% # Create a logical variable `ontime` for the `fill` aes
+  
+  ggplot() +
+  geom_bar(
+    aes(x = factor(month), fill = ontime), 
+    position = "stack") + # First layer for on-time proportion wrt. total number of flights
+  
+  geom_line(
+    data = into_chi_delay, 
+    aes(x = factor(month), y = avg_arr_delay*3000),
+    group = 1, col = avg_color, size = 2) + # Second layer for average arrival delay
+  
+  scale_y_continuous( 
+    name = "Number of flights", # Specify names for the first y-axis
+    sec.axis = sec_axis(~./3000, name="Average arrival delay (minute)") # Add and name second y-axis
+  ) + 
+  
+  scale_x_discrete(name = "Month") + # Name the x-axis
+  
+  scale_fill_discrete(name = "On-time flights", labels = c("Delay", "On-time", "Canceled")) + # Rename the legend
+  
+  theme(
+    axis.title.y  = element_text(color = prop_color, size=13),
+    axis.title.y.right = element_text(color = avg_color, size=13),
+  ) +
+  labs(
+    title = "Best Month for Convention",
+    subtitle = "Number of flights and arrival delay by month",           
+    caption = "Data source: Bureau of Transportation Statistics")
+```
+    
+
+c. You have (hopefully) reached the frontier of what you can do to answer this question with the data that you have. If you wanted to push the frontier further of figuring out when the convention should be, what are two other *public* datasets that would be useful in making a decision? Include links to the datasets and the names of the variables you would analyze. We do not expect you to actually analyze these other datasets.
+    
+* Dataset: Air Traffic Activity System (ATADS) [Source: Federal Aviation Administration](https://aspm.faa.gov/opsnet/sys/Center.asp)
+
+    - Additional variables to analyze: `Day`, `Air Carrier`, `General Aviation`
+    - Major cause of arrival delay for Chicago airports were 'National aviation system delay'.
+    - National Aviation System (NAS): Delays and cancellations attributable to the national aviation system that refer to a broad set of conditions, such as non-extreme weather conditions, airport operations, heavy traffic volume, and air traffic control.
+    - That is reason why we should additionally analyze 'Air traffic activity system' dataset to find the best day to hold a convention.
+
+* Report: Air Travel Consumer Report 2016 [Source: Bureau of Transportation Statistics](https://www.transportation.gov/sites/dot.gov/files/docs/resources/individuals/aviation-consumer-protection/258591/2016octoberatcr.pdf)
+
+    - Additional variables to analyze : Schduled arrival time and scheduled departure time
+    - This report has the sheduled arrival time and departure time breakdown, so we can find the best flight time slot to fly during the day.
+    - Data validation: `Number of departure`, `number of arrival`, `% on time`
+    - We would like to also make use of this report to validate what we have analyzed, since both report and our data used same dataset from Bureau of Transportation Statistics.
+    
+## Pick an airline
+
+1. Now that you’ve decided on a date, recommend an airline to take in order to arrive on time. The attendees are not price-sensitive, so you don’t need to worry about cost. Make a “basic” plot and a “sophisticated” plot to support your recommendation. Which plot do you prefer and why?
+
+    I recommend Southwest Airlines (WN). Because WN has the most flights to Chicago in October and its on-time rate is among the highest.
+    
+    I prefer "sophisticated" plot because it visualizes the total number of flights of each airlines in October. Without that information, one might think Alaska Airlines (AS) is the best option. But the number of flights of AS to Chicago is so small (and probably limited in origins), that it might be unavailable for some attendees.
+    
+```{r}
+into_chi_carrier <- into_chi_flights %>% 
+  filter(month == 10) %>% # Zoom into the recommended month, October
+  group_by(carrier) %>% 
+  summarise(
+    avg_arr_delay = mean(arr_delay, na.rm = TRUE)
+    )
+
+ggplot(into_chi_carrier, aes(x = reorder(carrier, avg_arr_delay), y = avg_arr_delay, group = 1)) + 
+  geom_col()+
+  labs(
+    x = "Carrier", 
+    y = "Average arrival delay in October (minutes)"
+  ) + 
+  labs(
+    title = "Average arrival delay in October by carrier",
+    caption = "Data source: Bureau of Transportation Statistics")
+  
+```
+
+
+```{r}
+into_chi_flights %>% 
+  filter(month == 10) %>% # Zoom into October
+  mutate(ontime = arr_delay_min == 0) %>% 
+  ggplot(aes(x = carrier, fill = ontime)) +
+  geom_bar(position = "stack") +
+  scale_fill_discrete(name = "On-time flights", labels = c("Delay", "On-time", "Canceled")) +
+  labs(
+    title = "On-time count by carrier",
+    caption = "Data source: Bureau of Transportation Statistics")
+```
+
+
+## Reconsider the date?
+
+1. The trade organization sends an update. Some of its most important members are in Greer, South Carolina. Does that change your recommendation of when to host the convention? Make a plot that supports your new recommendation and shows why it is superior to your old recommendation.
+
+    We should choose February or March instead of October. In February and March, we have more flights from Greer, South Carolina to Chicago. This means the most important members have more options to choose from. Also, on-time rate in February and March is among the highest. Particularly, March has the lowest average arrival delay and lowest chances of flights getting canceled. If arriving earlier than scheduled and flight cancellation is not the primary concern for the Mayor's office, February would be our first-best choice.  
+    
+```{r}
+# Data cleaning
+origin_greer_1 <- into_chi_flights %>% 
+  filter(origin_city == "Greer, SC") %>% 
+  group_by(month) %>% 
+  summarise(avg_arr_delay = mean(arr_delay, na.rm = TRUE)) 
+
+origin_greer_2 <- into_chi_flights %>% 
+  filter(origin_city == "Greer, SC") %>% 
+  group_by(month) %>% 
+  summarise(num_of_flights = n())
+
+origin_greer <- full_join(origin_greer_1, origin_greer_2)
+
+# Plot
+into_chi_flights %>% 
+  filter(origin_city == "Greer, SC") %>% 
+  group_by(month) %>% 
+  mutate(ontime = (arr_delay_min == 0)) %>% 
+  ggplot() +
+  geom_bar(aes(x = factor(month), fill = ontime), position = "stack")+
+  geom_line(data = origin_greer, aes(x = factor(month), y = avg_arr_delay*5), group = 1, col = avg_color, size = 2)+
+  scale_y_continuous( 
+    # Specify names for the first y-axis
+    name = "Number of flights",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./5, name="Average arrival delay(minute)")
+  )+
+  scale_x_discrete(name = "Month")+
+  
+  scale_fill_discrete(name = "On-time flights", labels = c("Delay", "On-time", "Canceled")) +
+  
+  theme(
+    axis.title.y  = element_text(color = prop_color, size=13),
+    axis.title.y.right = element_text(color = avg_color, size=13),
+  ) +
+  labs(
+    title = "Best Month for Convention",
+    subtitle = "Number of flights and arrival delay by month",           
+    caption = "Data source: Bureau of Transportation Statistics")
+```
+
